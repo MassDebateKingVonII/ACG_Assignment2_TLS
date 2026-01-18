@@ -71,7 +71,7 @@
     python -m server.main
     ```
 
-> *Note:* This generates multiple certificates, notably `root_cert.pem`. Copy it to:
+> *Note:* This generates multiple certificates, notably `root_cert.pem` and `file_sign_cert.pem`. Copy it to:
 
     client_path/trusted_root_store
 

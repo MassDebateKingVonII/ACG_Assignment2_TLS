@@ -2,6 +2,16 @@ import socket
 import ssl
 import os
 import json
+import base64
+
+from utils.PKI_utils import verify_bytes
+from utils.hash_utils import sha256
+
+from client.utils.certificateValidation import (
+    TRUSTED_ROOT_PATH,
+    FILE_CERT_PATH,
+    load_file_signing_public_key
+)
 
 HOST = '127.0.0.1'
 PORT = 5001
@@ -19,7 +29,7 @@ def send_file(conn, filepath):
 
     payload = json.dumps({
         "filename": filename,
-        "content": plaintext_bytes.hex()
+        "content": base64.b64encode(plaintext_bytes).decode()
     }).encode()
 
     conn.send(b"FILE")
@@ -28,7 +38,7 @@ def send_file(conn, filepath):
     print(f"[+] Sent file: {filename}")
 
 # ---------------- RECEIVE FILE ----------------
-def receive_file(conn):
+def receive_file(conn, file_pubkey):
     conn.send(b"RECV")
     length = int.from_bytes(conn.recv(8), 'big')
     data = conn.recv(length)
@@ -55,18 +65,38 @@ def receive_file(conn):
         print(f"[!] Server error: {payload['error']}")
         return
 
-    content_bytes = bytes.fromhex(payload["content"])
+    content_bytes = base64.b64decode(payload["content"])
+    file_signature = base64.b64decode(payload["file_signature"])
+
+    # Compute hash of file
+    file_hash = sha256(content_bytes)
+
+    # Verify file signature
+    try:
+        verify_bytes(file_pubkey, file_hash, file_signature)
+        print("[+] File signature verified!")
+    except Exception as e:
+        print(f"[!] File signature verification failed: {e}")
+        return
+
+    # Save file to disk after verification
     save_path = os.path.join(DOWNLOAD_DIR, payload["filename"])
     with open(save_path, 'wb') as f:
         f.write(content_bytes)
 
-    print(f"[+] File downloaded to download/{payload['filename']}")
+    print(f"[+] File downloaded to {save_path}")
 
 # ---------------- MAIN CLIENT ----------------
 def main():
+    # Load file signing public key
+    file_pubkey = load_file_signing_public_key()
+    if not file_pubkey:
+        print("[!] Cannot continue without trusted file signing key")
+        return
+
     context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
     context.minimum_version = ssl.TLSVersion.TLSv1_3
-    context.load_verify_locations("client_path/trusted_root_store/root_cert.pem")
+    context.load_verify_locations(TRUSTED_ROOT_PATH)
     context.verify_mode = ssl.CERT_REQUIRED
     
     raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -103,7 +133,7 @@ def main():
                 else:
                     print("[!] File not found")
             elif choice == "2":
-                receive_file(s)
+                receive_file(s, file_pubkey)
             else:
                 print("[!] Invalid option")
 

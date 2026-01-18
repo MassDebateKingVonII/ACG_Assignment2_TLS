@@ -18,6 +18,8 @@ ROOT_KEY_PATH = os.path.join(CERT_DIR, "root_key.pem")
 ROOT_CERT_PATH = os.path.join(CERT_DIR, "root_cert.pem")
 SERVER_KEY_PATH = os.path.join(CERT_DIR, "server_key.pem")
 SERVER_CERT_PATH = os.path.join(CERT_DIR, "server_cert.pem")
+FILE_KEY_PATH = os.path.join(CERT_DIR, "file_sign_key.pem")
+FILE_CERT_PATH = os.path.join(CERT_DIR, "file_sign_cert.pem")
 
 ROOT_KEY_PASSPHRASE = os.getenv("ROOT_KEY_PASSPHRASE").encode()
 SERVER_KEY_PASSPHRASE = os.getenv("Server_KEY_PASSPHRASE").encode()
@@ -88,7 +90,7 @@ def generate_root_ca():
     return private_key, cert
 
 
-# ---------------- SERVER CERTIFICATE SIGNING ----------------
+# ---------------- SERVER CERTIFICATE FOR TLS ----------------
 def generate_server_certificate(root_key, root_cert, common_name="localhost"):
     if os.path.exists(SERVER_KEY_PATH) and os.path.exists(SERVER_CERT_PATH):
         # Load existing
@@ -148,6 +150,45 @@ def generate_server_certificate(root_key, root_cert, common_name="localhost"):
     with open(SERVER_CERT_PATH, "wb") as f:
         f.write(cert.public_bytes(serialization.Encoding.PEM))
     
+    return private_key, cert
+
+# ---------------- SERVER CERTIFICATE FOR FILES ----------------
+def generate_file_signing_key(root_key, root_cert):
+    if os.path.exists(FILE_KEY_PATH) and os.path.exists(FILE_CERT_PATH):
+        # Load existing
+        key = load_private_key(FILE_KEY_PATH, SERVER_KEY_PASSPHRASE)
+        with open(FILE_CERT_PATH, "rb") as f:
+            cert = x509.load_pem_x509_certificate(f.read())
+        return key, cert
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "File Signing Key")])
+    
+    ski = x509.SubjectKeyIdentifier.from_public_key(private_key.public_key())
+    aki = x509.AuthorityKeyIdentifier.from_issuer_public_key(root_key.public_key())
+
+    cert = x509.CertificateBuilder()\
+        .subject_name(subject)\
+        .issuer_name(root_cert.subject)\
+        .public_key(private_key.public_key())\
+        .serial_number(x509.random_serial_number())\
+        .not_valid_before(datetime.now(timezone.utc))\
+        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=3650))\
+        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)\
+        .add_extension(ski, critical=False)\
+        .add_extension(aki, critical=False)\
+        .sign(root_key, hashes.SHA256())
+
+    with open(FILE_KEY_PATH, "wb") as f:
+        f.write(private_key.private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.TraditionalOpenSSL,
+            serialization.BestAvailableEncryption(SERVER_KEY_PASSPHRASE)
+        ))
+
+    with open(FILE_CERT_PATH, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+
     return private_key, cert
 
 

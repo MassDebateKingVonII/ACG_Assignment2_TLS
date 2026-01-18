@@ -10,7 +10,8 @@ from utils.PKI_utils import (
     ROOT_KEY_PASSPHRASE,
     SERVER_KEY_PASSPHRASE,
     generate_root_ca, 
-    generate_server_certificate
+    generate_server_certificate,
+    generate_file_signing_key
 )
 from server.utils.rotateMEK import rotate_master_key
 from server.controller.fileController import (
@@ -26,7 +27,7 @@ server_running = True
 server_socket = None
 
 # ---------------- CLIENT HANDLER ----------------
-def handle_client(conn, addr, server_key):
+def handle_client(conn, addr, file_key):
     print(f"[+] Connected: {addr}")
 
     try:
@@ -44,7 +45,7 @@ def handle_client(conn, addr, server_key):
                 data = conn.recv(length)
                 payload = json.loads(data.decode())
 
-                saved_file = save_file_controller(payload, server_key)
+                saved_file = save_file_controller(payload, file_key)
                 print(f"[+] File saved: {saved_file}")
 
             if cmd == b"RECV":
@@ -100,7 +101,8 @@ def main():
 
     # Generate/load root CA and server certificate
     root_key, root_cert = generate_root_ca()
-    server_key, _ = generate_server_certificate(root_key, root_cert)
+    server_key, server_cert = generate_server_certificate(root_key, root_cert)
+    file_key, file_cert = generate_file_signing_key(root_key, root_cert)
 
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_3
@@ -118,7 +120,7 @@ def main():
             try:
                 conn, addr = sock.accept()
                 tls_conn = context.wrap_socket(conn, server_side=True)
-                threading.Thread(target=handle_client, args=(tls_conn, addr, server_key), daemon=True).start()
+                threading.Thread(target=handle_client, args=(tls_conn, addr, file_key), daemon=True).start()
             except OSError:
                 break
 
