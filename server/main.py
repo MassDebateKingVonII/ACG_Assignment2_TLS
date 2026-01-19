@@ -5,7 +5,7 @@ import threading
 import json
 import base64
 
-from utils.socket_utils import recv_all, send_resp
+from utils.socket_utils import recv_all, send_resp, send_all
 
 from utils.PKI_utils import (
     ROOT_KEY_PATH,
@@ -196,30 +196,52 @@ def handle_client(conn, addr, file_key):
                         else:
                             print(f"[!] Invalid client signature from {username}")
                             # Optionally: send error back to client
+                            
+                    elif cmd == b"LIST":
+                        try:
+                            # Get list of files from controller
+                            files = get_file_list_controller()  # returns a list of filenames
 
-                    elif cmd == b"RECV":
-                        files = get_file_list_controller()
-                        payload = json.dumps(files).encode()
-                        conn.send(len(payload).to_bytes(8, 'big'))
-                        conn.send(payload)
+                            # Send JSON-encoded length-prefixed response
+                            payload = json.dumps(files).encode()
+                            conn.send(len(payload).to_bytes(8, 'big'))  # 8-byte length prefix
+                            conn.send(payload)
 
-                        if not files:
+                            print(f"[+] Sent file list to {conn.username}")
                             continue
 
-                        fname_len = int.from_bytes(recv_all(conn, 8), 'big')
-                        filename = recv_all(conn, fname_len).decode()
-
-                        file_data = get_encrypted_file_controller(filename)
-                        if file_data:
-                            payload = json.dumps(file_data).encode()
+                        except Exception as e:
+                            print(f"[!] Error sending file list to {conn.username}: {e}")
+                            # Send empty list on error
+                            payload = json.dumps([]).encode()
                             conn.send(len(payload).to_bytes(8, 'big'))
                             conn.send(payload)
-                            print(f"[+] Sent file to {conn.username}: {filename}")
-                        else:
-                            error_payload = json.dumps({"error": "File does not exist"}).encode()
-                            conn.send(len(error_payload).to_bytes(8, 'big'))
-                            conn.send(error_payload)
-                            print(f"[!] {conn.username} requested nonexistent file: {filename}")
+                            continue
+                        
+                    elif cmd == b"DOWN":
+                        # Receive filename
+                        fname_len_bytes = recv_all(conn, 8)
+                        if not fname_len_bytes:
+                            print("[-] Client disconnected")
+                            continue
+                        fname_len = int.from_bytes(fname_len_bytes, "big")
+                        filename_bytes = recv_all(conn, fname_len)
+                        if not filename_bytes:
+                            print("[-] Client disconnected")
+                            continue
+                        filename = filename_bytes.decode()
+
+                        file_data = get_encrypted_file_controller(filename)
+                        if not file_data:
+                            payload = json.dumps({"error": "File does not exist"}).encode()
+                            send_all(conn, len(payload).to_bytes(8, "big"))
+                            send_all(conn, payload)
+                            continue
+
+                        payload_bytes = json.dumps(file_data).encode()
+                        send_all(conn, len(payload_bytes).to_bytes(8, "big"))
+                        send_all(conn, payload_bytes)
+                        print(f"[+] Sent file {filename} to {conn.username}")
                             
                 except (ConnectionResetError, BrokenPipeError):
                     print(f"[-] Client {addr} disconnected during file handling")

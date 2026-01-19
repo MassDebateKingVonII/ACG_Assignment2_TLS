@@ -138,3 +138,45 @@ def authenticate_client(conn):
         else:
             print(f"[!] Unknown response from server: {resp}")
             continue
+        
+def authenticate_client_gui(sock, auth_type, username, password):
+    """
+    GUI version of authentication
+    Returns: (success, message, username)
+    """
+    try:
+        sock.send(b"AUTH")
+        response = sock.recv(1024).decode()
+        
+        if response != "READY":
+            return False, "Server not ready for authentication", None
+        
+        # Send auth type
+        sock.send(auth_type.upper().encode())
+        response = sock.recv(1024).decode()
+        
+        if "USERNAME" not in response:
+            return False, "Unexpected server response", None
+        
+        # Send username
+        sock.send(username.encode())
+        response = sock.recv(1024).decode()
+        
+        if "PASSWORD" not in response:
+            return False, "Unexpected server response", None
+        
+        # Send password (hash it for security)
+        sock.send(password_hash.encode())
+        response = sock.recv(1024).decode()
+        
+        if response.startswith("AUTH_SUCCESS"):
+            return True, "Authentication successful", username
+        elif "FAILED" in response:
+            return False, "Invalid credentials", None
+        elif "EXISTS" in response:
+            return False, "Username already exists", None
+        else:
+            return False, f"Authentication failed: {response}", None
+            
+    except Exception as e:
+        return False, f"Connection error: {str(e)}", None

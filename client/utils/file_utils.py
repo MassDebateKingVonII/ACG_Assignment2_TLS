@@ -1,4 +1,6 @@
-import os, base64, json
+import os, base64, json, struct
+
+from utils.socket_utils import recv_all
 
 from utils.PKI_utils import sign_bytes, verify_bytes, load_private_key
 from utils.hash_utils import sha256
@@ -33,32 +35,34 @@ def send_file(conn, filepath, username):
     conn.send(len(payload).to_bytes(8, "big"))
     conn.send(payload)
     print(f"[+] Sent file: {filename}")
+    
+def get_file_list(conn):
+    
+    conn.send(b"LIST")  # command to server
 
-# ---------------- RECEIVE FILE ----------------
-def receive_file(conn, file_pubkey):
-    conn.send(b"RECV")
-    length = int.from_bytes(conn.recv(8), 'big')
+    length_bytes = conn.recv(8)
+    if not length_bytes:
+        return []
+    length = int.from_bytes(length_bytes, 'big')
     data = conn.recv(length)
     files = json.loads(data.decode())
+    return files
 
-    if not files:
-        print("[!] No files available")
-        return
-
-    print("[+] Files available:")
-    for f in files:
-        print(f" - {f}")
-
-    filename = input("Enter filename to download (or /quit to cancel): ").strip()
-    if filename.lower() == "/quit":
-        return
+def download_file(conn, filename, file_pubkey):
+    conn.send(b"DOWN")
 
     fname_bytes = filename.encode()
-    conn.send(len(fname_bytes).to_bytes(8, 'big'))
+    conn.send(len(fname_bytes).to_bytes(8, "big"))
     conn.send(fname_bytes)
 
-    length = int.from_bytes(conn.recv(8), 'big')
-    payload_bytes = conn.recv(length)
+    length_bytes = recv_all(conn, 8)
+    if not length_bytes:
+        print("[!] Server disconnected")
+        return
+
+    length = int.from_bytes(length_bytes, "big")
+    payload_bytes = recv_all(conn, length)
+
     payload = json.loads(payload_bytes.decode())
 
     if "error" in payload:
@@ -77,8 +81,8 @@ def receive_file(conn, file_pubkey):
         print(f"[!] File signature verification failed: {e}")
         return
 
-    save_path = os.path.join(DOWNLOAD_DIR, payload["filename"])
-    with open(save_path, 'wb') as f:
+    save_path = os.path.join(DOWNLOAD_DIR, filename)
+    with open(save_path, "wb") as f:
         f.write(content_bytes)
 
     print(f"[+] File downloaded to {save_path}")

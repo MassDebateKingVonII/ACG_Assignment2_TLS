@@ -9,7 +9,7 @@ from client.utils.certificateValidation import (
 )
 
 from client.utils.auth_utils import authenticate_client
-from client.utils.file_utils import send_file, receive_file
+from client.utils.file_utils import send_file, download_file, get_file_list
 
 HOST = '127.0.0.1'
 PORT = 5001
@@ -43,11 +43,13 @@ def main():
             while True:
                 print("\n--- FILE MENU ---")
                 print("1. Send file to server")
-                print("2. Receive file from server")
-                print("3. /quit")
+                print("2. List files from server")
+                print("3. Download file from server")
+
+                print("4. /quit")
                 choice = input("Choose option: ").strip()
 
-                if choice == "3" or choice.lower() == "/quit":
+                if choice == "4" or choice.lower() == "/quit":
                     s.send(b"QUIT")
                     print("[+] Client disconnected")
                     break
@@ -65,8 +67,24 @@ def main():
                         send_file(s, path, username)
                     else:
                         print("[!] File not found")
+                        
                 elif choice == "2":
+                    files = get_file_list(s)
+                    if files:
+                        print("[+] Files on server:")
+                        for f in files:
+                            print(f" - {f}")
+                    else:
+                        print("[!] No files found")
+
+                elif choice == "3":
+                    filename = input("Enter filename to download: ").strip()
+                    if filename:
+                        download_file(s, filename, file_pubkey)
+                        
+                elif choice == "4":
                     receive_file(s, file_pubkey)
+
                 else:
                     print("[!] Invalid option")
 
