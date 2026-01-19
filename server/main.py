@@ -1,3 +1,4 @@
+import os
 import socket
 import ssl
 import threading
@@ -27,7 +28,7 @@ from server.controller.fileController import (
     get_encrypted_file_controller
 )
 
-from server.controller.userController import register_user, login_user
+from server.controller.userController import register_user, login_user, check_user_exists
 
 HOST = '127.0.0.1'
 PORT = 5001
@@ -77,9 +78,8 @@ def handle_client(conn, addr, file_key):
             password = payload.get("password")
 
             if action == "register":
-                pubkey = payload.get("public_key")
-                if register_user(username, password, pubkey):
-                    send_resp(conn, b"REGISTERED")
+                if (check_user_exists(username) == False):
+                    send_resp(conn, b"REGISTERING")
                     
                     # Wait for CSR from client
                     try:
@@ -111,14 +111,22 @@ def handle_client(conn, addr, file_key):
                                 root_key = load_private_key(ROOT_KEY_PATH, passphrase=ROOT_KEY_PASSPHRASE)
                                 root_cert = load_certificate(ROOT_CERT_PATH)
 
-                                # Sign CSR and get raw bytes
                                 signed_cert = sign_csr(csr_bytes, root_key, root_cert)
 
-                                # Send the certificate
+                                CERT_DIR = "server/certificates/clients"
+                                os.makedirs(CERT_DIR, exist_ok=True)
+
+                                cert_path = os.path.join(CERT_DIR, f"{username}.pem")
+                                with open(cert_path, "wb") as f:
+                                    f.write(signed_cert)
+
                                 conn.send(len(signed_cert).to_bytes(8, "big"))
                                 conn.send(signed_cert)
-                                
+
+                                register_user(username, password, cert_path)
+
                                 print(f"[+] Signed certificate sent to {username}")
+                                print(f"[+] Certificate stored at {cert_path}")
                                 
                                 # After sending certificate, go back to auth menu (don't break)
                                 # Client will need to login now
@@ -137,39 +145,6 @@ def handle_client(conn, addr, file_key):
                         
                 else:
                     send_resp(conn, b"REG_FAILED")
-        
-            elif action == "submit_csr":
-                # Handle direct CSR submission (not during registration)
-                csr_b64 = payload.get("csr")
-                csr_bytes = base64.b64decode(csr_b64)
-                username = payload.get("username")
-
-                if not csr_bytes or not username:
-                    send_resp(conn, b"CSR_FAILED")
-                    continue
-
-                try:
-                    # Load root CA
-                    root_key = load_private_key(ROOT_KEY_PATH, passphrase=ROOT_KEY_PASSPHRASE)
-                    root_cert = load_certificate(ROOT_CERT_PATH)
-
-                    # Sign CSR and get raw bytes
-                    signed_cert = sign_csr(csr_bytes, root_key, root_cert)
-
-                    # Send the certificate
-                    conn.send(len(signed_cert).to_bytes(8, "big"))
-                    conn.send(signed_cert)
-                    
-                    print(f"[+] Signed certificate sent to {username}")
-                    
-                    # Continue to auth menu
-                    continue
-                    
-                except Exception as e:
-                    print(f"[!] Error signing CSR for {username}: {e}")
-                    error_msg = json.dumps({"error": str(e)}).encode()
-                    conn.send(len(error_msg).to_bytes(8, "big"))
-                    conn.send(error_msg)
                 
             elif action == "login":
                 user_data = login_user(username, password)

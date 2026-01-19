@@ -1,15 +1,27 @@
 import os
 from dotenv import load_dotenv
-from server.config.db import get_db
+from mysql.connector import pooling
+
 
 load_dotenv()
 
 DB_NAME = os.getenv("DB_NAME")
 
 def init_database():
-    print("[*] Connecting to MySQL server...")
 
-    conn = get_db()  # get a connection from the pool
+    db_pool = pooling.MySQLConnectionPool(
+        pool_name="mypool",
+        pool_size=5,                 # number of connections
+        pool_reset_session=True,
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASS"),
+        autocommit = True,
+        ssl_disabled= False           # TLS assumed ON
+    )
+    
+    conn = db_pool.get_connection()
+    
     try:
         with conn.cursor() as cur:
             # Drop database
@@ -45,7 +57,7 @@ def init_database():
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     username VARCHAR(255) UNIQUE NOT NULL,
                     password_hash VARCHAR(255) NOT NULL,
-                    public_key TEXT NOT NULL,
+                    cert_path TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)

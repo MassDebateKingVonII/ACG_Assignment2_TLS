@@ -1,6 +1,9 @@
 from cryptography import x509
 from cryptography.hazmat.primitives import serialization, hashes
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import rsa, ec, padding
+from cryptography.exceptions import InvalidSignature
+from datetime import datetime, timedelta, timezone
+
 
 TRUSTED_ROOT_PATH = "client_path/trusted_root_store/root_cert.pem"
 FILE_CERT_PATH = "client_path/trusted_root_store/file_sign_cert.pem"
@@ -24,10 +27,45 @@ def load_file_signing_public_key():
             padding=padding.PKCS1v15(),
             algorithm=file_cert.signature_hash_algorithm
         )
-        print("[+] File signing certificate verified against root CA")
+        print("[+] File Signing Certificate verified against root CA")
     except Exception as e:
-        print(f"[!] File signing certificate verification failed: {e}")
+        print(f"[!] File Signing Certificate verification failed: {e}")
         return None
 
     # Extract public key
     return file_cert.public_key()
+
+def verify_cert_signed_by_root(cert_pem: bytes, root_cert_pem: bytes) -> bool:
+    cert = x509.load_pem_x509_certificate(cert_pem)
+    root_cert = x509.load_pem_x509_certificate(root_cert_pem)
+    root_pubkey = root_cert.public_key()
+
+    # Use offset-aware properties
+    now = datetime.now(timezone.utc)
+    if now < cert.not_valid_before_utc or now > cert.not_valid_after_utc:
+        print("[!] Certificate expired or not yet valid")
+        return False
+
+    try:
+        if isinstance(root_pubkey, rsa.RSAPublicKey):
+            root_pubkey.verify(
+                cert.signature,
+                cert.tbs_certificate_bytes,
+                padding.PKCS1v15(),
+                cert.signature_hash_algorithm,
+            )
+        elif isinstance(root_pubkey, ec.EllipticCurvePublicKey):
+            root_pubkey.verify(
+                cert.signature,
+                cert.tbs_certificate_bytes,
+                ec.ECDSA(cert.signature_hash_algorithm),
+            )
+        else:
+            print("[!] Unsupported CA key type")
+            return False
+
+        return True
+
+    except InvalidSignature:
+        print("[!] Certificate signature invalid")
+        return False

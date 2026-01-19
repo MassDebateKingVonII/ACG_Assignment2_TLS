@@ -3,7 +3,12 @@ import os, json, base64
 from client.utils.CSR_utils import (
     generate_csr,
     CSR_FILE_PATH,
-    KEY_FILE_PATH
+    KEY_FILE_PATH,
+)
+
+from client.utils.certificateValidation import (
+    TRUSTED_ROOT_PATH,
+    verify_cert_signed_by_root
 )
 
 CLIENT_CERT_PATH = os.path.join("client_path", "certificates")
@@ -43,7 +48,6 @@ def authenticate_client(conn):
 
         if choice == "1":
             payload["action"] = "register"
-            payload["public_key"] = "CLIENT_PUBLIC_KEY_PEM"
         else:
             payload["action"] = "login"
 
@@ -64,8 +68,8 @@ def authenticate_client(conn):
             print(f"[+] Logged in as {username}")
             return username
             
-        elif resp == b"REGISTERED":
-            print(f"[+] Registration successful. Generating CSR...")
+        elif resp == b"REGISTERING":
+            print(f"[+] Registrating in process. Generating CSR...")
             
             # Generate CSR
             csr_pem, key_pem = generate_csr(username)
@@ -98,46 +102,26 @@ def authenticate_client(conn):
                     return None
                 
                 cert_len = int.from_bytes(cert_len_bytes, "big")
-                print(f"[DEBUG] Receiving certificate of {cert_len} bytes")
-                
-                # Validate length
-                if cert_len > 100 * 1024 or cert_len < 100:
-                    print(f"[!] Invalid certificate length: {cert_len} bytes")
-                    # Try to read error message
-                    if cert_len > 0 and cert_len < 10000:
-                        error_data = recv_all(conn, cert_len)
-                        try:
-                            error_msg = json.loads(error_data.decode())
-                            print(f"[!] Server error: {error_msg.get('error', 'Unknown error')}")
-                        except:
-                            print(f"[!] Raw error data: {error_data[:200]}")
-                    return None
                 
                 # Read the certificate
                 signed_cert = recv_all(conn, cert_len)
                 
                 # Verify it looks like a certificate
-                if signed_cert.startswith(b"-----BEGIN CERTIFICATE-----"):
+                with open(TRUSTED_ROOT_PATH, "rb") as f:
+                    root_pem = f.read()
+
+                if verify_cert_signed_by_root(signed_cert, root_pem):
                     cert_file = os.path.join(CLIENT_CERT_PATH, f"{username}_cert.pem")
                     with open(cert_file, "wb") as f:
                         f.write(signed_cert)
-                    print(f"[+] Received signed certificate: {cert_file}")
+
+                    print("[+] Certificate verified and stored")
                     print("[+] Registration complete! You can now login.")
-                    # Continue to show auth menu again
                     continue
                 else:
-                    # Might be JSON error
-                    try:
-                        error_msg = json.loads(signed_cert.decode())
-                        print(f"[!] Server error: {error_msg.get('error', 'Unknown error')}")
-                    except:
-                        print(f"[!] Received invalid data from server")
-                        print(f"[!] First 100 bytes: {signed_cert[:100]}")
+                    print("[!] Server sent invalid certificate")
                     return None
-                    
-            except MemoryError:
-                print("[!] Memory error - certificate size too large")
-                return None
+                
             except Exception as e:
                 print(f"[!] Error receiving certificate: {e}")
                 import traceback
