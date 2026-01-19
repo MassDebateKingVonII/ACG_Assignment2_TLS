@@ -1,13 +1,13 @@
 import os
+
 from dotenv import load_dotenv
 load_dotenv()
 
 from datetime import datetime, timedelta, timezone
 import ipaddress
-
 from cryptography import x509
+from cryptography.x509 import KeyUsage
 from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
-
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
@@ -22,43 +22,58 @@ FILE_KEY_PATH = os.path.join(CERT_DIR, "file_sign_key.pem")
 FILE_CERT_PATH = os.path.join(CERT_DIR, "file_sign_cert.pem")
 
 ROOT_KEY_PASSPHRASE = os.getenv("ROOT_KEY_PASSPHRASE").encode()
-SERVER_KEY_PASSPHRASE = os.getenv("Server_KEY_PASSPHRASE").encode()
+SERVER_KEY_PASSPHRASE = os.getenv("SERVER_KEY_PASSPHRASE").encode()
 
 
-# ---------------- LOAD PRIVATE KEY ----------------
+# ---------------- HELPERS ----------------
 def load_private_key(path, password):
     with open(path, "rb") as f:
         return serialization.load_pem_private_key(f.read(), password=password)
 
 
-# ---------------- ROOT CA ----------------
-def generate_root_ca():
-    if os.path.exists(ROOT_KEY_PATH) and os.path.exists(ROOT_CERT_PATH):
-        # Load existing
-        root_key = load_private_key(ROOT_KEY_PATH, ROOT_KEY_PASSPHRASE)
-        with open(ROOT_CERT_PATH, "rb") as f:
-            root_cert = x509.load_pem_x509_certificate(f.read())
-        return root_key, root_cert
+def load_cert(path):
+    with open(path, "rb") as f:
+        return x509.load_pem_x509_certificate(f.read())
+
+
+from cryptography.x509 import KeyUsage
+
+def load_or_generate_cert(key_path, cert_path, subject_name, issuer_key=None, issuer_cert=None,
+                          is_ca=False, eku=None, san=None, validity_days=365, key_passphrase=None):
+    # Load existing
+    if os.path.exists(key_path) and os.path.exists(cert_path):
+        key = load_private_key(key_path, key_passphrase)
+        cert = load_cert(cert_path)
+        return key, cert
 
     now = datetime.now(timezone.utc)
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Root CA")])
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, subject_name)])
+    issuer = issuer_cert.subject if issuer_cert else subject
 
-    ski = x509.SubjectKeyIdentifier.from_public_key(private_key.public_key())
-    
-    cert = x509.CertificateBuilder()\
-        .subject_name(subject)\
-        .issuer_name(issuer)\
-        .public_key(private_key.public_key())\
-        .serial_number(x509.random_serial_number())\
-        .not_valid_before(now)\
-        .not_valid_after(now + timedelta(days=3650))\
-        .add_extension(
-            x509.BasicConstraints(ca=True, path_length=None),
-            critical=True
-        )\
-        .add_extension(
-            x509.KeyUsage(
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(subject)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now)
+        .not_valid_after(now + timedelta(days=validity_days))
+        .add_extension(x509.BasicConstraints(ca=is_ca, path_length=None), critical=True)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+    )
+
+    # Authority Key Identifier if issued by a CA
+    if issuer_key and issuer_cert:
+        builder = builder.add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(issuer_key.public_key()),
+            critical=False
+        )
+
+    # Add KeyUsage based on CA vs end-entity
+    if is_ca:
+        builder = builder.add_extension(
+            KeyUsage(
                 digital_signature=True,
                 key_cert_sign=True,
                 key_encipherment=False,
@@ -70,129 +85,88 @@ def generate_root_ca():
                 crl_sign=True
             ),
             critical=True
-        )\
-        .add_extension(
-            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH, ExtendedKeyUsageOID.CLIENT_AUTH]),
-            critical=False
-        )\
-        .add_extension(ski, critical=False)\
-        .sign(private_key, hashes.SHA256())
-
-    with open(ROOT_KEY_PATH, "wb") as f:
-        f.write(private_key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.TraditionalOpenSSL,
-            serialization.BestAvailableEncryption(ROOT_KEY_PASSPHRASE)
-        ))
-    with open(ROOT_CERT_PATH, "wb") as f:
-        f.write(cert.public_bytes(serialization.Encoding.PEM))
-
-    return private_key, cert
-
-
-# ---------------- SERVER CERTIFICATE FOR TLS ----------------
-def generate_server_certificate(root_key, root_cert, common_name="localhost"):
-    if os.path.exists(SERVER_KEY_PATH) and os.path.exists(SERVER_CERT_PATH):
-        # Load existing
-        server_key = load_private_key(SERVER_KEY_PATH, SERVER_KEY_PASSPHRASE)
-        with open(SERVER_CERT_PATH, "rb") as f:
-            server_cert = x509.load_pem_x509_certificate(f.read())
-        return server_key, server_cert
-
-    now = datetime.now(timezone.utc)
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    
-    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, common_name)])
-    
-    ski = x509.SubjectKeyIdentifier.from_public_key(private_key.public_key())
-    aki = x509.AuthorityKeyIdentifier.from_issuer_public_key(root_key.public_key())
-    
-    san = x509.SubjectAlternativeName([
-        x509.DNSName(common_name),
-        x509.IPAddress(ipaddress.IPv4Address("127.0.0.1"))
-    ])
-    
-    cert = x509.CertificateBuilder()\
-        .subject_name(subject)\
-        .issuer_name(root_cert.subject)\
-        .public_key(private_key.public_key())\
-        .serial_number(x509.random_serial_number())\
-        .not_valid_before(now)\
-        .not_valid_after(now + timedelta(days=365))\
-        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)\
-        .add_extension(
-            x509.KeyUsage(
+        )
+    else:
+        # End-entity cert (server)
+        builder = builder.add_extension(
+            KeyUsage(
                 digital_signature=True,
+                key_cert_sign=False,
                 key_encipherment=True,
                 content_commitment=False,
                 data_encipherment=False,
                 key_agreement=False,
                 encipher_only=False,
                 decipher_only=False,
-                key_cert_sign=False,
                 crl_sign=False
             ),
             critical=True
-        )\
-        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)\
-        .add_extension(san, critical=False)\
-        .add_extension(ski, critical=False)\
-        .add_extension(aki, critical=False)\
-        .sign(root_key, hashes.SHA256())
-    
-    with open(SERVER_KEY_PATH, "wb") as f:
-        f.write(private_key.private_bytes(
+        )
+
+    # Add EKU if provided
+    if eku:
+        builder = builder.add_extension(x509.ExtendedKeyUsage(eku), critical=False)
+
+    # Add SAN if provided
+    if san:
+        builder = builder.add_extension(san, critical=False)
+
+    # Sign certificate
+    cert = builder.sign(private_key=issuer_key or key, algorithm=hashes.SHA256())
+
+    # Save private key
+    with open(key_path, "wb") as f:
+        f.write(key.private_bytes(
             serialization.Encoding.PEM,
             serialization.PrivateFormat.TraditionalOpenSSL,
-            serialization.BestAvailableEncryption(SERVER_KEY_PASSPHRASE)
+            serialization.BestAvailableEncryption(key_passphrase) if key_passphrase else serialization.NoEncryption()
         ))
-    
-    with open(SERVER_CERT_PATH, "wb") as f:
-        f.write(cert.public_bytes(serialization.Encoding.PEM))
-    
-    return private_key, cert
 
-# ---------------- SERVER CERTIFICATE FOR FILES ----------------
+    # Save certificate
+    with open(cert_path, "wb") as f:
+        f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+    return key, cert
+
+# ---------------- GENERATE ROOT CA ----------------
+def generate_root_ca():
+    return load_or_generate_cert(
+        ROOT_KEY_PATH, ROOT_CERT_PATH, "Root CA",
+        is_ca=True,
+        eku=[ExtendedKeyUsageOID.SERVER_AUTH, ExtendedKeyUsageOID.CLIENT_AUTH],
+        key_passphrase=ROOT_KEY_PASSPHRASE,
+        validity_days=3650
+    )
+
+
+# ---------------- GENERATE SERVER CERT ----------------
+def generate_server_certificate(root_key, root_cert, common_name="localhost"):
+    san = x509.SubjectAlternativeName([
+        x509.DNSName(common_name),
+        x509.IPAddress(ipaddress.IPv4Address("127.0.0.1"))
+    ])
+    return load_or_generate_cert(
+        SERVER_KEY_PATH, SERVER_CERT_PATH, common_name,
+        issuer_key=root_key,
+        issuer_cert=root_cert,
+        eku=[ExtendedKeyUsageOID.SERVER_AUTH],
+        san=san,
+        key_passphrase=SERVER_KEY_PASSPHRASE
+    )
+
+
+# ---------------- GENERATE FILE SIGNING KEY ----------------
 def generate_file_signing_key(root_key, root_cert):
-    if os.path.exists(FILE_KEY_PATH) and os.path.exists(FILE_CERT_PATH):
-        # Load existing
-        key = load_private_key(FILE_KEY_PATH, SERVER_KEY_PASSPHRASE)
-        with open(FILE_CERT_PATH, "rb") as f:
-            cert = x509.load_pem_x509_certificate(f.read())
-        return key, cert
-
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "File Signing Key")])
-    
-    ski = x509.SubjectKeyIdentifier.from_public_key(private_key.public_key())
-    aki = x509.AuthorityKeyIdentifier.from_issuer_public_key(root_key.public_key())
-
-    cert = x509.CertificateBuilder()\
-        .subject_name(subject)\
-        .issuer_name(root_cert.subject)\
-        .public_key(private_key.public_key())\
-        .serial_number(x509.random_serial_number())\
-        .not_valid_before(datetime.now(timezone.utc))\
-        .not_valid_after(datetime.now(timezone.utc) + timedelta(days=3650))\
-        .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)\
-        .add_extension(ski, critical=False)\
-        .add_extension(aki, critical=False)\
-        .sign(root_key, hashes.SHA256())
-
-    with open(FILE_KEY_PATH, "wb") as f:
-        f.write(private_key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.TraditionalOpenSSL,
-            serialization.BestAvailableEncryption(SERVER_KEY_PASSPHRASE)
-        ))
-
-    with open(FILE_CERT_PATH, "wb") as f:
-        f.write(cert.public_bytes(serialization.Encoding.PEM))
-
-    return private_key, cert
+    return load_or_generate_cert(
+        FILE_KEY_PATH, FILE_CERT_PATH, "File Signing Key",
+        issuer_key=root_key,
+        issuer_cert=root_cert,
+        validity_days=3650,
+        key_passphrase=SERVER_KEY_PASSPHRASE
+    )
 
 
-# ---------------- SIGN FILES ----------------
+# ---------------- SIGN/VERIFY FILES ----------------
 def sign_bytes(private_key, data: bytes) -> bytes:
     return private_key.sign(
         data,
@@ -202,6 +176,7 @@ def sign_bytes(private_key, data: bytes) -> bytes:
         ),
         hashes.SHA256()
     )
+
 
 def verify_bytes(public_key, data: bytes, signature: bytes) -> None:
     public_key.verify(
