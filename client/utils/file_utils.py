@@ -1,24 +1,36 @@
 import os, base64, json
 
-from utils.PKI_utils import verify_bytes
+from utils.PKI_utils import sign_bytes, verify_bytes, load_private_key
 from utils.hash_utils import sha256
 
 UPLOAD_DIR = os.path.join('client_path', 'upload')
 DOWNLOAD_DIR = os.path.join('client_path', 'download')
 
-# ---------------- SEND FILE ----------------
-def send_file(conn, filepath):
-    filename = os.path.basename(filepath)
-    with open(filepath, 'rb') as f:
-        plaintext_bytes = f.read()
+KEY_DIR = os.path.join('client_path', 'certificates')
 
+# ---------------- SEND FILE ----------------
+def send_file(conn, filepath, username):
+    key_file = os.path.join(KEY_DIR, f"{username}_key.pem")
+    filename = os.path.basename(filepath)
+    
+    with open(filepath, "rb") as f:
+        file_bytes = f.read()
+    
+    # Compute hash
+    file_hash = sha256(file_bytes)
+    
+    # Sign the hash with client's private key
+    private_key = load_private_key(key_file, None)
+    file_signature = sign_bytes(private_key, file_hash)
+    
     payload = json.dumps({
         "filename": filename,
-        "content": base64.b64encode(plaintext_bytes).decode()
+        "content": base64.b64encode(file_bytes).decode(),
+        "signature": base64.b64encode(file_signature).decode()
     }).encode()
-
+    
     conn.send(b"FILE")
-    conn.send(len(payload).to_bytes(8, 'big'))
+    conn.send(len(payload).to_bytes(8, "big"))
     conn.send(payload)
     print(f"[+] Sent file: {filename}")
 

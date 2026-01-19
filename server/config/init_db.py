@@ -34,21 +34,6 @@ def init_database():
 
             # Use the new database
             cur.execute(f"USE {DB_NAME}")
-
-            # Create FIles Table
-            print("[*] Creating table 'encrypted_files'...")
-            cur.execute("""
-                CREATE TABLE encrypted_files (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    filename VARCHAR(255) NOT NULL UNIQUE,
-                    file_nonce VARCHAR(24) NOT NULL, -- base64 encoded nonce
-                    file_tag VARCHAR(24) NOT NULL,   -- base64 encoded GCM tag
-                    file_signature TEXT NOT NULL,
-                    enc_dek JSON NOT NULL,      -- stores ciphertext, nonce, tag
-                    kek_salt VARCHAR(64) NOT NULL,  -- base64 string
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-            """)
             
             # Create User table
             print("[*] Creating table 'Users'...")
@@ -61,6 +46,29 @@ def init_database():
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
+
+            # Create FIles Table
+            print("[*] Creating table 'encrypted_files'...")
+            cur.execute("""
+                CREATE TABLE encrypted_files (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    filename VARCHAR(255) NOT NULL UNIQUE,
+                    uploaded_by VARCHAR(255) NOT NULL,
+                    uploaded_by_id INT NOT NULL,
+                    file_nonce VARCHAR(24) NOT NULL, -- base64 encoded nonce
+                    file_tag VARCHAR(24) NOT NULL,   -- base64 encoded GCM tag
+                    file_signature TEXT NOT NULL,
+                    enc_dek JSON NOT NULL,           -- stores ciphertext, nonce, tag
+                    kek_salt VARCHAR(64) NOT NULL,   -- base64 string
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_user
+                        FOREIGN KEY (uploaded_by_id)
+                        REFERENCES users(id)
+                        ON DELETE CASCADE
+                        ON UPDATE CASCADE
+                );
+            """)
+        
     finally:
         conn.close()
 

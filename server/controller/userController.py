@@ -1,4 +1,10 @@
-from server.model.userModel import create_user, get_user_by_username, check_user_by_username
+from server.model.userModel import (
+    create_user, 
+    get_user_by_username, 
+    check_user_by_username,
+    get_user_by_user_id
+)
+
 from server.utils.auth import hash_password, verify_password
 
 def register_user(username: str, password: str, cert_path: str) -> bool:
@@ -30,3 +36,12 @@ def check_user_exists(username: str):
     """
     exists = check_user_by_username(username)
     return exists
+
+def get_user_pubkey(id : int):
+    """
+    Gets the public key (certificate) of the user by id
+    """
+    user = get_user_by_user_id(id)
+    cert_path = user[cert_path]
+    return cert_path
+    

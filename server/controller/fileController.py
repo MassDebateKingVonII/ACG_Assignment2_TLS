@@ -4,20 +4,24 @@ from utils.hash_utils import sha256
 from utils.PKI_utils import sign_bytes
 from server.model.fileModel import store_file, list_files, load_file
 
-def save_file_controller(payload, file_key):
+def save_file_controller(payload, file_key, user_id, username):
     """
-    Store the file received over TLS and sign it for non-repudiation.
-    The payload contains Base64-encoded bytes.
+    1. Store the file received over TLS
+    2. Checks client signature and stores who uploaded it
+    3. Sever signs it for non-repudiation
+    
+    Note: The payload contains Base64-encoded bytes.
     """
+    
     filename = payload["filename"]
     file_bytes = base64.b64decode(payload["content"])  # Decode Base64 payload
 
-    # Generate file hash
+    # Generate file hash (Signed by server)
     file_hash = sha256(file_bytes)
     signature = sign_bytes(file_key, file_hash)
     
-    # Store file (at rest, could be encrypted separately if desired)
-    store_file(filename, file_bytes, signature)
+    # Store file, model function does envelope encryption
+    store_file(filename, file_bytes, signature, user_id, username)
     return filename
 
 def get_file_list_controller():

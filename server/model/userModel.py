@@ -15,6 +15,15 @@ def create_user(username: str, password_hash: str, cert_path: str) -> bool:
     finally:
         db.close()
 
+def get_user_by_user_id(user_id: int) -> dict | None:
+    """Fetch a user record by user id."""
+    db = get_db()
+    try:
+        with db.cursor(dictionary=True) as cur:
+            cur.execute("SELECT * FROM users WHERE id=%s", (user_id,))
+            return cur.fetchone()
+    finally:
+        db.close()
 
 def get_user_by_username(username: str) -> dict | None:
     """Fetch a user record by username."""

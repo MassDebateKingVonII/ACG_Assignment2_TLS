@@ -196,7 +196,10 @@ def generate_file_signing_key(root_key, root_cert):
 def sign_bytes(private_key, data: bytes) -> bytes:
     return private_key.sign(
         data,
-        padding.PKCS1v15(),
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
         hashes.SHA256()
     )
 
@@ -204,6 +207,9 @@ def verify_bytes(public_key, data: bytes, signature: bytes) -> None:
     public_key.verify(
         signature,
         data,
-        padding.PKCS1v15(),
+        padding.PSS(
+            mgf=padding.MGF1(hashes.SHA256()),
+            salt_length=padding.PSS.MAX_LENGTH
+        ),
         hashes.SHA256()
     )

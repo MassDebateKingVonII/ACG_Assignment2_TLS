@@ -28,7 +28,13 @@ from server.controller.fileController import (
     get_encrypted_file_controller
 )
 
-from server.controller.userController import register_user, login_user, check_user_exists
+from server.middleware.fileMiddleware import (
+    verify_client_signature
+)
+
+from server.controller.userController import (
+    register_user, login_user, check_user_exists
+)
 
 HOST = '127.0.0.1'
 PORT = 5001
@@ -150,18 +156,20 @@ def handle_client(conn, addr, file_key):
                 user_data = login_user(username, password)
                 if user_data:
                     user = user_data
+                    conn.username = user_data["username"] # bind username to the socket
+                    conn.userid = user_data["id"] # bind userid to the socket
                     send_resp(conn, b"LOGGED_IN")
-                    print(f"[+] User {username} logged in successfully")
+                    print(f"[+] User {conn.username} with id: {conn.userid} logged in successfully")
                 else:
                     send_resp(conn, b"LOGIN_FAILED")
-
+                    
             else:
                 send_resp(conn, b"INVALID_ACTION")
 
         # If we have a logged-in user, proceed to file handling
         if user:
             # ---------------- FILE HANDLING ----------------
-            print(f"[+] Starting file handling for user: {user['username']}")
+            print(f"[+] Starting file handling for user: {conn.username}")
             while True:
                 try:
                     cmd = recv_all(conn, 4)
@@ -174,11 +182,20 @@ def handle_client(conn, addr, file_key):
                         break
 
                     if cmd == b"FILE":
-                        length = int.from_bytes(recv_all(conn, 8), 'big')
+                        length = int.from_bytes(recv_all(conn, 8), "big")
                         data = recv_all(conn, length)
                         payload = json.loads(data.decode())
-                        saved_file = save_file_controller(payload, file_key)
-                        print(f"[+] File saved from {user['username']}: {saved_file}")
+                        
+                        user_id = conn.userid
+                        username = conn.username
+
+                        # Middleware verification
+                        if verify_client_signature(payload, user_id):
+                            saved_file = save_file_controller(payload, file_key, user_id, username)
+                            print(f"[+] File saved from {username}: {saved_file}")
+                        else:
+                            print(f"[!] Invalid client signature from {username}")
+                            # Optionally: send error back to client
 
                     elif cmd == b"RECV":
                         files = get_file_list_controller()
@@ -197,18 +214,18 @@ def handle_client(conn, addr, file_key):
                             payload = json.dumps(file_data).encode()
                             conn.send(len(payload).to_bytes(8, 'big'))
                             conn.send(payload)
-                            print(f"[+] Sent file to {user['username']}: {filename}")
+                            print(f"[+] Sent file to {conn.username}: {filename}")
                         else:
                             error_payload = json.dumps({"error": "File does not exist"}).encode()
                             conn.send(len(error_payload).to_bytes(8, 'big'))
                             conn.send(error_payload)
-                            print(f"[!] {user['username']} requested nonexistent file: {filename}")
+                            print(f"[!] {conn.username} requested nonexistent file: {filename}")
                             
                 except (ConnectionResetError, BrokenPipeError):
                     print(f"[-] Client {addr} disconnected during file handling")
                     break
                 except Exception as e:
-                    print(f"[!] Error handling file operation for {user['username']}: {e}")
+                    print(f"[!] Error handling file operation for {conn.username}: {e}")
                     break
 
     except Exception as e:

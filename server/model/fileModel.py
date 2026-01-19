@@ -5,7 +5,7 @@ from server.utils.envelopeEncryption import encrypt_file_at_rest, decrypt_file_a
 SAVE_DIR = os.path.join('server_path', 'save')
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-def store_file(filename: str, plaintext_bytes: bytes, signature: bytes):
+def store_file(filename: str, plaintext_bytes: bytes, signature: bytes, user_id: int, username: str):
     
     if file_exists(filename):
         delete_file_record(filename)
@@ -27,10 +27,12 @@ def store_file(filename: str, plaintext_bytes: bytes, signature: bytes):
         with db.cursor() as cur:
             cur.execute("""
                 INSERT INTO encrypted_files
-                (filename, file_nonce, file_tag, file_signature, enc_dek, kek_salt)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (filename, uploaded_by, uploaded_by_id, file_nonce, file_tag, file_signature, enc_dek, kek_salt)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 filename,
+                username,
+                user_id,
                 enc_data["file"]["nonce"],         # store nonce
                 enc_data["file"]["tag"],           # store GCM tag
                 signature_b64,                     # file signature

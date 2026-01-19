@@ -65,6 +65,7 @@ def authenticate_client(conn):
         resp = recv_all(conn, resp_len)
 
         if resp == b"LOGGED_IN":
+            conn.username = username
             print(f"[+] Logged in as {username}")
             return username
             
