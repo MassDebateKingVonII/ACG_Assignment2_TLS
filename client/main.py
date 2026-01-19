@@ -81,9 +81,6 @@ def main():
                     filename = input("Enter filename to download: ").strip()
                     if filename:
                         download_file(s, filename, file_pubkey)
-                        
-                elif choice == "4":
-                    receive_file(s, file_pubkey)
 
                 else:
                     print("[!] Invalid option")
