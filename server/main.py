@@ -29,7 +29,9 @@ from server.controller.fileController import (
 )
 
 from server.middleware.fileMiddleware import (
-    verify_client_signature
+    verify_client_signature,
+    create_upload_receipt,
+    create_download_receipt
 )
 
 from server.controller.userController import (
@@ -193,9 +195,16 @@ def handle_client(conn, addr, file_key):
                         if verify_client_signature(payload, user_id):
                             saved_file = save_file_controller(payload, file_key, user_id, username)
                             print(f"[+] File saved from {username}: {saved_file}")
+
+                            try:
+                                receipt = create_upload_receipt(payload, saved_file, username, user_id, file_key)
+                                send_resp(conn, json.dumps(receipt).encode())
+                                print(f"[+] Sent receipt to {username} for {saved_file}")
+                            except Exception as e:
+                                print(f"[!] Error sending receipt: {e}")
+                                send_resp(conn, b"RECEIPT_FAILED")
                         else:
                             print(f"[!] Invalid client signature from {username}")
-                            # Optionally: send error back to client
                             
                     elif cmd == b"LIST":
                         try:
@@ -234,13 +243,19 @@ def handle_client(conn, addr, file_key):
                         file_data = get_encrypted_file_controller(filename)
                         if not file_data:
                             payload = json.dumps({"error": "File does not exist"}).encode()
-                            send_all(conn, len(payload).to_bytes(8, "big"))
-                            send_all(conn, payload)
+                            conn.send(len(payload).to_bytes(8, "big"))
+                            conn.send(payload)
                             continue
 
                         payload_bytes = json.dumps(file_data).encode()
-                        send_all(conn, len(payload_bytes).to_bytes(8, "big"))
-                        send_all(conn, payload_bytes)
+                        conn.send(len(payload_bytes).to_bytes(8, "big"))
+                        conn.send(payload_bytes)
+                        
+                        receipt = create_download_receipt(filename, conn.username, conn.userid, file_key)
+                        receipt_bytes = json.dumps(receipt).encode()
+                        conn.send(len(receipt_bytes).to_bytes(8, "big"))
+                        conn.send(receipt_bytes)
+
                         print(f"[+] Sent file {filename} to {conn.username}")
                             
                 except (ConnectionResetError, BrokenPipeError):

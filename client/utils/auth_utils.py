@@ -139,44 +139,65 @@ def authenticate_client(conn):
             print(f"[!] Unknown response from server: {resp}")
             continue
         
-def authenticate_client_gui(sock, auth_type, username, password):
-    """
-    GUI version of authentication
-    Returns: (success, message, username)
-    """
-    try:
-        sock.send(b"AUTH")
-        response = sock.recv(1024).decode()
-        
-        if response != "READY":
-            return False, "Server not ready for authentication", None
-        
-        # Send auth type
-        sock.send(auth_type.upper().encode())
-        response = sock.recv(1024).decode()
-        
-        if "USERNAME" not in response:
-            return False, "Unexpected server response", None
-        
-        # Send username
-        sock.send(username.encode())
-        response = sock.recv(1024).decode()
-        
-        if "PASSWORD" not in response:
-            return False, "Unexpected server response", None
-        
-        # Send password (hash it for security)
-        sock.send(password_hash.encode())
-        response = sock.recv(1024).decode()
-        
-        if response.startswith("AUTH_SUCCESS"):
-            return True, "Authentication successful", username
-        elif "FAILED" in response:
-            return False, "Invalid credentials", None
-        elif "EXISTS" in response:
-            return False, "Username already exists", None
-        else:
-            return False, f"Authentication failed: {response}", None
-            
-    except Exception as e:
-        return False, f"Connection error: {str(e)}", None
+def authenticate_client_gui(conn, action, username, password):
+    # wait for AUTH
+    auth_signal = recv_all(conn, 4)
+    if auth_signal != b"AUTH":
+        return False, "Protocol error"
+
+    payload = {
+        "action": action,   # "login" or "register"
+        "username": username,
+        "password": password
+    }
+
+    data = json.dumps(payload).encode()
+    conn.send(len(data).to_bytes(8, "big"))
+    conn.send(data)
+
+    resp_len = int.from_bytes(recv_all(conn, 8), "big")
+    resp = recv_all(conn, resp_len)
+
+    if resp == b"LOGGED_IN":
+        conn.username = username
+        return True, "OK"
+
+    if resp == b"REGISTERING":
+        # CSR flow (reuse your existing code)
+        csr_pem, key_pem = generate_csr(username)
+
+        key_file = os.path.join(KEY_FILE_PATH, f"{username}_key.pem")
+        with open(key_file, "wb") as f:
+            f.write(key_pem)
+
+        csr_payload = {
+            "action": "submit_csr",
+            "username": username,
+            "csr": base64.b64encode(csr_pem).decode()
+        }
+
+        csr_bytes = json.dumps(csr_payload).encode()
+        conn.send(len(csr_bytes).to_bytes(8, "big"))
+        conn.send(csr_bytes)
+
+        cert_len = int.from_bytes(recv_all(conn, 8), "big")
+        signed_cert = recv_all(conn, cert_len)
+
+        with open(TRUSTED_ROOT_PATH, "rb") as f:
+            root_pem = f.read()
+
+        if verify_cert_signed_by_root(signed_cert, root_pem):
+            cert_file = os.path.join(CLIENT_CERT_PATH, f"{username}_cert.pem")
+            with open(cert_file, "wb") as f:
+                f.write(signed_cert)
+            return False, "Registered successfully. Please login."
+
+        return False, "Certificate verification failed"
+
+    if resp == b"LOGIN_FAILED":
+        return False, "Login failed"
+
+    if resp == b"REG_FAILED":
+        return False, "Registration failed"
+
+    return False, "Unknown server response"

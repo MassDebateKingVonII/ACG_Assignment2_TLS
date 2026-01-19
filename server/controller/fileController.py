@@ -6,9 +6,10 @@ from server.model.fileModel import store_file, list_files, load_file
 
 def save_file_controller(payload, file_key, user_id, username):
     """
-    1. Store the file received over TLS
-    2. Checks client signature and stores who uploaded it
+    1. Store the file received over TLS (Before)
+    2. Checks client signature and stores who uploaded it (Before)
     3. Sever signs it for non-repudiation
+    4. Uses envelope encryption for confidentiality and integrity at rest
     
     Note: The payload contains Base64-encoded bytes.
     """

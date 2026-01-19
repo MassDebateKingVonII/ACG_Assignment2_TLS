@@ -64,7 +64,7 @@ def main():
                     fname = input("Enter filename: ").strip()
                     path = os.path.join(UPLOAD_DIR, fname)
                     if os.path.exists(path):
-                        send_file(s, path, username)
+                        send_file(s, path, username, file_pubkey)
                     else:
                         print("[!] File not found")
                         
