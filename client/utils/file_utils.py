@@ -1,5 +1,9 @@
 import os, base64, json, struct
 
+from PIL import Image, ImageTk
+import tkinter as tk
+import io
+
 from utils.socket_utils import recv_all
 
 from utils.PKI_utils import sign_bytes, verify_bytes, load_private_key
@@ -149,3 +153,50 @@ def download_file(conn, filename, file_pubkey, download_dir=DOWNLOAD_DIR):
 
     except Exception as e:
         print(f"[!] Failed to verify download receipt: {e}")
+        
+def preview_file(self, conn, filename):
+    conn.send(b"PREV")
+    fname_bytes = filename.encode()
+    conn.send(len(fname_bytes).to_bytes(8, "big"))
+    conn.send(fname_bytes)
+
+    # Receive preview payload
+    length_bytes = recv_all(conn, 8)
+    if not length_bytes:
+        print("[!] Server disconnected")
+        return
+
+    length = int.from_bytes(length_bytes, "big")
+    payload_bytes = recv_all(conn, length)
+    payload = json.loads(payload_bytes.decode())
+
+    if "error" in payload:
+        self.preview_text.insert(tk.END, f"[!] Server error: {payload['error']}\n")
+        return
+
+    preview_bytes = base64.b64decode(payload["preview"])
+    self.preview_text.delete(1.0, tk.END)  # Clear previous preview
+
+    # Text preview
+    if filename.lower().endswith((".txt", ".py", ".md")):
+        try:
+            text = preview_bytes.decode("utf-8")
+            self.preview_text.insert(tk.END, text)
+        except UnicodeDecodeError:
+            self.preview_text.insert(tk.END, "[!] Cannot decode file as text\n")
+
+    # Image preview
+    elif filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
+        try:
+            from PIL import Image, ImageTk
+            import io
+
+            img = Image.open(io.BytesIO(preview_bytes))
+            img.thumbnail((400, 400))  # Resize
+            self.img_preview = ImageTk.PhotoImage(img)  # Keep reference
+            self.preview_text.image_create(tk.END, image=self.img_preview)
+        except Exception as e:
+            self.preview_text.insert(tk.END, f"[!] Failed to preview image: {e}\n")
+
+    else:
+        self.preview_text.insert(tk.END, "[!] Preview not supported for this file type\n")

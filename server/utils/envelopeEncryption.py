@@ -1,6 +1,5 @@
-import os
-import base64
-from utils.AES_utils import encrypt_message, decrypt_message
+import os, base64
+from server.utils.AES_utils import encrypt_message, decrypt_message
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from dotenv import load_dotenv

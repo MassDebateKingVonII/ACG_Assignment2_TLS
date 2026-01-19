@@ -44,6 +44,7 @@ def authenticate_client(conn):
         # valid choice; ask credentials
         username = input("Enter username: ").strip()
         password = input("Enter password: ").strip()
+        
         payload = {"username": username, "password": password}
 
         if choice == "1":

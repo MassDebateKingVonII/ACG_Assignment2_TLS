@@ -5,7 +5,7 @@ import threading
 import json
 import base64
 
-from utils.socket_utils import recv_all, send_resp, send_all
+from utils.socket_utils import recv_all, send_resp
 
 from utils.PKI_utils import (
     ROOT_KEY_PATH,
@@ -205,6 +205,38 @@ def handle_client(conn, addr, file_key):
                                 send_resp(conn, b"RECEIPT_FAILED")
                         else:
                             print(f"[!] Invalid client signature from {username}")
+                            
+                    elif cmd == b"PREV":
+                        # Receive filename
+                        fname_len_bytes = recv_all(conn, 8)
+                        if not fname_len_bytes:
+                            continue
+                        fname_len = int.from_bytes(fname_len_bytes, "big")
+                        filename_bytes = recv_all(conn, fname_len)
+                        if not filename_bytes:
+                            continue
+                        filename = filename_bytes.decode()
+
+                        # Load decrypted file in memory
+                        try:
+                            result = get_encrypted_file_controller(filename)
+                            plaintext_b64 = result["content"]  # already a string       
+                                                 
+                        except Exception as e:
+                            payload = json.dumps({"error": str(e)}).encode()
+                            conn.send(len(payload).to_bytes(8, "big"))
+                            conn.send(payload)
+                            continue
+
+                        # For preview, encode as Base64 (so client can handle safely)
+                        payload = json.dumps({
+                            "filename": filename,
+                            "preview": plaintext_b64
+                        }).encode()
+
+                        conn.send(len(payload).to_bytes(8, "big"))
+                        conn.send(payload)
+                        print(f"[+] Sent preview for {filename} to {conn.username}")
                             
                     elif cmd == b"LIST":
                         try:
