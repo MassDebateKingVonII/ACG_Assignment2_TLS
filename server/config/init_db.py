@@ -23,7 +23,7 @@ def init_database():
             # Use the new database
             cur.execute(f"USE {DB_NAME}")
 
-            # Create table
+            # Create FIles Table
             print("[*] Creating table 'encrypted_files'...")
             cur.execute("""
                 CREATE TABLE encrypted_files (
@@ -34,6 +34,18 @@ def init_database():
                     file_signature TEXT NOT NULL,
                     enc_dek JSON NOT NULL,      -- stores ciphertext, nonce, tag
                     kek_salt VARCHAR(64) NOT NULL,  -- base64 string
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            """)
+            
+            # Create User table
+            print("[*] Creating table 'Users'...")
+            cur.execute("""
+                CREATE TABLE users (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    username VARCHAR(255) UNIQUE NOT NULL,
+                    password_hash VARCHAR(255) NOT NULL,
+                    public_key TEXT NOT NULL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
             """)
