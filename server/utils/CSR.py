@@ -1,4 +1,5 @@
 from cryptography import x509
+from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
 from cryptography.hazmat.primitives import serialization, hashes
 from datetime import datetime, timedelta, timezone
 
@@ -26,6 +27,10 @@ def sign_csr(csr_data : bytes, root_key, root_cert, validity_days: int = 365) ->
         .add_extension(
             x509.BasicConstraints(ca=False, path_length=None),
             critical=True
+        )\
+        .add_extension(
+            x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CODE_SIGNING]),
+            critical=False
         )\
         .sign(private_key=root_key, algorithm=hashes.SHA256())
 
