@@ -53,7 +53,6 @@ def init_database():
                 CREATE TABLE encrypted_files (
                     id INT AUTO_INCREMENT PRIMARY KEY,
                     filename VARCHAR(255) NOT NULL UNIQUE,
-                    uploaded_by VARCHAR(255) NOT NULL,
                     uploaded_by_id INT NOT NULL,
                     file_nonce VARCHAR(24) NOT NULL, -- base64 encoded nonce
                     file_tag VARCHAR(24) NOT NULL,   -- base64 encoded GCM tag

@@ -5,7 +5,7 @@ from server.utils.envelopeEncryption import encrypt_file_at_rest, decrypt_file_a
 SAVE_DIR = os.path.join('server_path', 'save')
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-def store_file(filename: str, plaintext_bytes: bytes, signature: bytes, user_id: int, username: str):
+def store_file(filename: str, plaintext_bytes: bytes, signature: bytes, user_id: int):
     
     if file_exists(filename):
         delete_file_record(filename)
@@ -27,11 +27,10 @@ def store_file(filename: str, plaintext_bytes: bytes, signature: bytes, user_id:
         with db.cursor() as cur:
             cur.execute("""
                 INSERT INTO encrypted_files
-                (filename, uploaded_by, uploaded_by_id, file_nonce, file_tag, file_signature, enc_dek, kek_salt)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                (filename, uploaded_by_id, file_nonce, file_tag, file_signature, enc_dek, kek_salt)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
             """, (
                 filename,
-                username,
                 user_id,
                 enc_data["file"]["nonce"],         # store nonce
                 enc_data["file"]["tag"],           # store GCM tag
@@ -46,11 +45,17 @@ def list_files():
     db = get_db()
     try:
         with db.cursor() as cur:
-            cur.execute("SELECT filename, uploaded_by, created_at FROM encrypted_files ORDER BY created_at DESC")
+            cur.execute("""
+                SELECT f.filename, u.username AS uploaded_by, f.created_at
+                FROM encrypted_files f
+                INNER JOIN users u ON f.uploaded_by_id = u.id
+                ORDER BY f.created_at DESC
+            """)
             rows = cur.fetchall()
             return rows
     finally:
         db.close()
+
 
 def load_file(filename: str) -> tuple[bytes, str] | None:
     db = get_db()

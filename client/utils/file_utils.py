@@ -1,16 +1,9 @@
-import os, base64, json, struct
-
-from PIL import Image, ImageTk
-import tkinter as tk
-import io
+import os, base64, json
 
 from utils.socket_utils import recv_all
 from utils.PKI_utils import sign_bytes, verify_bytes
 from utils.hash_utils import sha256
 from utils.cert_utils import load_private_key
-
-UPLOAD_DIR = os.path.join('client_path', 'upload')
-DOWNLOAD_DIR = os.path.join('client_path', 'download')
 
 KEY_DIR = os.path.join('client_path', 'certificates')
 
@@ -101,7 +94,7 @@ def get_file_list(conn):
             result.append({'filename': f[0], 'uploaded_by': f[1], 'created_at': f[2]})
     return result
 
-def download_file(conn, filename, file_pubkey, download_dir=DOWNLOAD_DIR):
+def download_file(conn, filename, file_pubkey, save_path):
     # ---------------- REQUEST FILE ----------------
     conn.send(b"DOWN")
     fname_bytes = filename.encode()
@@ -125,7 +118,7 @@ def download_file(conn, filename, file_pubkey, download_dir=DOWNLOAD_DIR):
     content_bytes = base64.b64decode(payload["content"])
     file_signature = base64.b64decode(payload["file_signature"])
 
-    # Verify file signature
+    # ---------------- VERIFY SIGNATURE ----------------
     file_hash = sha256(content_bytes)
     try:
         verify_bytes(file_pubkey, file_hash, file_signature)
@@ -134,12 +127,12 @@ def download_file(conn, filename, file_pubkey, download_dir=DOWNLOAD_DIR):
         print(f"[!] File signature verification failed: {e}")
         return
 
-    # Save the file locally
-    save_path = os.path.join(download_dir, filename)
+    # ---------------- SAVE FILE ----------------
     with open(save_path, "wb") as f:
         f.write(content_bytes)
-    print(f"[+] File downloaded to {save_path}")
 
+    print(f"[+] File saved to: {save_path}")
+    
     # ---------------- RECEIVE SERVER RECEIPT ----------------
     try:
         receipt_len_bytes = recv_all(conn, 8)
@@ -154,10 +147,10 @@ def download_file(conn, filename, file_pubkey, download_dir=DOWNLOAD_DIR):
         # Verify server's signature on the receipt
         server_sig = base64.b64decode(receipt["server_signature"])
         receipt_copy = receipt.copy()
-        print(receipt_copy)
+        print("Receipt sent by Server:\n", receipt_copy)
+        
         del receipt_copy["server_signature"]  # remove before verification
         receipt_data = json.dumps(receipt_copy).encode()
-        print(receipt_data)
         receipt_hash = sha256(receipt_data)
 
         verify_bytes(file_pubkey, receipt_hash, server_sig)

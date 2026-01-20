@@ -37,6 +37,9 @@ from server.middleware.fileMiddleware import (
 from server.controller.userController import (
     register_user, login_user, check_user_exists
 )
+from server.middleware.userMiddleware import (
+    check_password_complexity
+)
 
 HOST = '127.0.0.1'
 PORT = 5001
@@ -86,73 +89,79 @@ def handle_client(conn, addr, file_key):
             password = payload.get("password")
 
             if action == "register":
-                if (check_user_exists(username) == False):
-                    send_resp(conn, b"REGISTERING")
+                password_result, password_feedback = check_password_complexity(password)
+                
+                if (password_result == False):
+                    send_resp(conn, b"REG_FAILED")
+                    send_resp(conn, json.dumps(password_feedback).encode("utf-8"))
+                    continue
                     
-                    # Wait for CSR from client
-                    try:
-                        csr_length_bytes = recv_all(conn, 8)
-                        if not csr_length_bytes:
-                            print(f"[-] Client {addr} disconnected after registration")
-                            return
-                            
-                        csr_length = int.from_bytes(csr_length_bytes, "big")
-                        csr_data = recv_all(conn, csr_length)
-                        
-                        if not csr_data:
-                            print(f"[-] Client {addr} disconnected while sending CSR")
-                            return
-                            
-                        csr_payload = json.loads(csr_data.decode())
-                        
-                        if csr_payload.get("action") == "submit_csr":
-                            csr_b64 = csr_payload.get("csr")
-                            csr_bytes = base64.b64decode(csr_b64)
-                            username = csr_payload.get("username")
-
-                            if not csr_bytes or not username:
-                                send_resp(conn, b"CSR_FAILED")
-                                continue
-
-                            try:
-                                # Load root CA
-                                root_key = load_private_key(ROOT_KEY_PATH, passphrase=ROOT_KEY_PASSPHRASE)
-                                root_cert = load_certificate(ROOT_CERT_PATH)
-
-                                signed_cert = sign_csr(csr_bytes, root_key, root_cert)
-
-                                CERT_DIR = "server/certificates/clients"
-                                os.makedirs(CERT_DIR, exist_ok=True)
-
-                                cert_path = os.path.join(CERT_DIR, f"{username}.pem")
-                                with open(cert_path, "wb") as f:
-                                    f.write(signed_cert)
-
-                                conn.send(len(signed_cert).to_bytes(8, "big"))
-                                conn.send(signed_cert)
-
-                                register_user(username, password, cert_path)
-
-                                print(f"[+] Signed certificate sent to {username}")
-                                print(f"[+] Certificate stored at {cert_path}")
-                                
-                                # After sending certificate, go back to auth menu (don't break)
-                                # Client will need to login now
-                                print(f"[+] Waiting for {username} to login...")
-                                # Continue the loop to show auth menu again
-                                continue
-                                
-                            except Exception as e:
-                                print(f"[!] Error signing CSR for {username}: {e}")
-                                error_msg = json.dumps({"error": str(e)}).encode()
-                                conn.send(len(error_msg).to_bytes(8, "big"))
-                                conn.send(error_msg)
-                    except Exception as e:
-                        print(f"[!] Error handling CSR after registration: {e}")
+                if (check_user_exists(username)):
+                    send_resp(conn, b"REG_FAILED")
+                    send_resp(conn, json.dumps({"error": "Username already exists"}).encode("utf-8"))
+                    continue
+                
+                send_resp(conn, b"REGISTERING")
+                
+                # Wait for CSR from client
+                try:
+                    csr_length_bytes = recv_all(conn, 8)
+                    if not csr_length_bytes:
+                        print(f"[-] Client {addr} disconnected after registration")
                         return
                         
-                else:
-                    send_resp(conn, b"REG_FAILED")
+                    csr_length = int.from_bytes(csr_length_bytes, "big")
+                    csr_data = recv_all(conn, csr_length)
+                    
+                    if not csr_data:
+                        print(f"[-] Client {addr} disconnected while sending CSR")
+                        return
+                        
+                    csr_payload = json.loads(csr_data.decode())
+                    
+                    if csr_payload.get("action") == "submit_csr":
+                        csr_b64 = csr_payload.get("csr")
+                        csr_bytes = base64.b64decode(csr_b64)
+                        username = csr_payload.get("username")
+
+                        if not csr_bytes or not username:
+                            send_resp(conn, b"CSR_FAILED")
+                            continue
+
+                        try:
+                            # Load root CA
+                            root_key = load_private_key(ROOT_KEY_PATH, passphrase=ROOT_KEY_PASSPHRASE)
+                            root_cert = load_certificate(ROOT_CERT_PATH)
+
+                            signed_cert = sign_csr(csr_bytes, root_key, root_cert)
+
+                            CERT_DIR = "server/certificates/clients"
+                            os.makedirs(CERT_DIR, exist_ok=True)
+
+                            cert_path = os.path.join(CERT_DIR, f"{username}.pem")
+                            with open(cert_path, "wb") as f:
+                                f.write(signed_cert)
+
+                            conn.send(len(signed_cert).to_bytes(8, "big"))
+                            conn.send(signed_cert)
+
+                            register_user(username, password, cert_path)
+
+                            print(f"[+] Signed certificate sent to {username}")
+                            print(f"[+] Certificate stored at {cert_path}")
+                            
+                            # After sending certificate, client can login
+                            print(f"[+] {username} can login now...")
+                            continue
+                            
+                        except Exception as e:
+                            print(f"[!] Error signing CSR for {username}: {e}")
+                            error_msg = json.dumps({"error": str(e)}).encode()
+                            conn.send(len(error_msg).to_bytes(8, "big"))
+                            conn.send(error_msg)
+                except Exception as e:
+                    print(f"[!] Error handling CSR after registration: {e}")
+                    return
                 
             elif action == "login":
                 user_data = login_user(username, password)
@@ -193,7 +202,7 @@ def handle_client(conn, addr, file_key):
 
                         # Middleware verification
                         if verify_client_signature(payload, user_id):
-                            saved_file = save_file_controller(payload, file_key, user_id, username)
+                            saved_file = save_file_controller(payload, file_key, user_id)
                             print(f"[+] File saved from {username}: {saved_file}")
 
                             try:

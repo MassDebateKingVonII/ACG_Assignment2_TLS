@@ -4,7 +4,7 @@ from utils.hash_utils import sha256
 from utils.PKI_utils import sign_bytes
 from server.model.fileModel import store_file, list_files, load_file
 
-def save_file_controller(payload, file_key, user_id, username):
+def save_file_controller(payload, file_key, user_id):
     """
     1. Store the file received over TLS (Before)
     2. Checks client signature and stores who uploaded it (Before)
@@ -22,7 +22,7 @@ def save_file_controller(payload, file_key, user_id, username):
     signature = sign_bytes(file_key, file_hash)
     
     # Store file, model function does envelope encryption
-    store_file(filename, file_bytes, signature, user_id, username)
+    store_file(filename, file_bytes, signature, user_id)
     return filename
 
 def get_file_list_controller():

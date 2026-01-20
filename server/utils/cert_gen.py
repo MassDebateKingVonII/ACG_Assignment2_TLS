@@ -142,6 +142,7 @@ def generate_server_certificate(root_key, root_cert, common_name="localhost"):
         issuer_cert=root_cert,
         eku=[ExtendedKeyUsageOID.SERVER_AUTH],
         san=san,
+        validity_days=90,
         key_passphrase=SERVER_KEY_PASSPHRASE
     )
 
@@ -152,6 +153,7 @@ def generate_file_signing_key(root_key, root_cert):
         FILE_KEY_PATH, FILE_CERT_PATH, "File Signing Key",
         issuer_key=root_key,
         issuer_cert=root_cert,
-        validity_days=3650,
+        eku=[ExtendedKeyUsageOID.CODE_SIGNING],
+        validity_days=365,
         key_passphrase=SERVER_KEY_PASSPHRASE
     )
