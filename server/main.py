@@ -240,15 +240,15 @@ def handle_client(conn, addr, file_key):
                             
                     elif cmd == b"LIST":
                         try:
-                            # Get list of files from controller
-                            files = get_file_list_controller()  # returns a list of filenames
+                            # Get full list of files
+                            files = get_file_list_controller()  # now returns a list of dicts
 
                             # Send JSON-encoded length-prefixed response
-                            payload = json.dumps(files).encode()
+                            payload = json.dumps(files, default=str).encode()  # default=str handles datetime
                             conn.send(len(payload).to_bytes(8, 'big'))  # 8-byte length prefix
                             conn.send(payload)
 
-                            print(f"[+] Sent file list to {conn.username}")
+                            print(f"[+] Sent full file info to {conn.username}")
                             continue
 
                         except Exception as e:

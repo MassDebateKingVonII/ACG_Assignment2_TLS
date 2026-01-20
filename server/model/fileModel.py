@@ -46,9 +46,9 @@ def list_files():
     db = get_db()
     try:
         with db.cursor() as cur:
-            cur.execute("SELECT filename FROM encrypted_files ORDER BY created_at DESC")
+            cur.execute("SELECT filename, uploaded_by, created_at FROM encrypted_files ORDER BY created_at DESC")
             rows = cur.fetchall()
-            return [r[0] for r in rows]
+            return rows
     finally:
         db.close()
 
