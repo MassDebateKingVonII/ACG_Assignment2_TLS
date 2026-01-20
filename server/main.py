@@ -7,7 +7,7 @@ import base64
 
 from utils.socket_utils import recv_all, send_resp
 
-from utils.PKI_utils import (
+from server.utils.cert_gen import (
     ROOT_KEY_PATH,
     ROOT_CERT_PATH,
     SERVER_KEY_PATH,
@@ -19,7 +19,7 @@ from utils.PKI_utils import (
     generate_file_signing_key
 )
 from server.utils.rotateMEK import rotate_master_key
-from server.utils.cert import load_certificate, load_private_key
+from utils.cert_utils import load_certificate, load_private_key
 from server.utils.CSR import sign_csr
 
 from server.controller.fileController import (

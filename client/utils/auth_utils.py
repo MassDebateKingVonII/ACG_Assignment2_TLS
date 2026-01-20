@@ -7,7 +7,10 @@ from client.utils.CSR_utils import (
 )
 
 from client.utils.certificateValidation import (
-    TRUSTED_ROOT_PATH,
+    TRUSTED_ROOT_PATH
+)
+
+from utils.PKI_utils import (
     verify_cert_signed_by_root
 )
 

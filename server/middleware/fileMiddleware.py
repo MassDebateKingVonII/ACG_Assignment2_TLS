@@ -1,14 +1,19 @@
 import time, base64, json
 from cryptography import x509
-from utils.PKI_utils import verify_bytes, sign_bytes
+from utils.PKI_utils import verify_bytes, sign_bytes, verify_cert_signed_by_root
 from utils.hash_utils import sha256
+
+from server.utils.cert_gen import ROOT_CERT_PATH
+
 from server.model.userModel import get_user_by_user_id
 
 def verify_client_signature(payload, user_id):
     """
     Middleware to verify the signature sent by the client.
-    Returns True if valid, False otherwise.
+    Returns True if valid and certificate is trusted, False otherwise.
     """
+    import base64
+
     file_bytes = base64.b64decode(payload["content"])
     client_signature = base64.b64decode(payload["signature"])
 
@@ -21,6 +26,15 @@ def verify_client_signature(payload, user_id):
     with open(cert_path, "rb") as f:
         cert_pem = f.read()
 
+    # Load the root CA certificate
+    with open(ROOT_CERT_PATH, "rb") as f:
+        root_cert_pem = f.read()
+
+    # Verify that the client cert is signed by the root CA
+    if not verify_cert_signed_by_root(cert_pem, root_cert_pem):
+        print("[!] Client certificate not trusted")
+        return False
+
     # Load the certificate and extract the public key
     cert = x509.load_pem_x509_certificate(cert_pem)
     public_key = cert.public_key()
@@ -28,11 +42,12 @@ def verify_client_signature(payload, user_id):
     # Generate hash of the file
     file_hash = sha256(file_bytes)
 
-    # Verify using the public key
+    # Verify the signature
     try:
         verify_bytes(public_key, file_hash, client_signature)
         return True
     except Exception:
+        print("[!] Client signature invalid")
         return False
 
 def create_upload_receipt(payload, saved_file, username, user_id, file_key):

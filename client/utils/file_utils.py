@@ -6,8 +6,9 @@ import io
 
 from utils.socket_utils import recv_all
 
-from utils.PKI_utils import sign_bytes, verify_bytes, load_private_key
+from utils.PKI_utils import sign_bytes, verify_bytes
 from utils.hash_utils import sha256
+from utils.cert_utils import load_private_key
 
 UPLOAD_DIR = os.path.join('client_path', 'upload')
 DOWNLOAD_DIR = os.path.join('client_path', 'download')

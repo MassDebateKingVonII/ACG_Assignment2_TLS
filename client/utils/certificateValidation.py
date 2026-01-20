@@ -34,38 +34,3 @@ def load_file_signing_public_key():
 
     # Extract public key
     return file_cert.public_key()
-
-def verify_cert_signed_by_root(cert_pem: bytes, root_cert_pem: bytes) -> bool:
-    cert = x509.load_pem_x509_certificate(cert_pem)
-    root_cert = x509.load_pem_x509_certificate(root_cert_pem)
-    root_pubkey = root_cert.public_key()
-
-    # Use offset-aware properties
-    now = datetime.now(timezone.utc)
-    if now < cert.not_valid_before_utc or now > cert.not_valid_after_utc:
-        print("[!] Certificate expired or not yet valid")
-        return False
-
-    try:
-        if isinstance(root_pubkey, rsa.RSAPublicKey):
-            root_pubkey.verify(
-                cert.signature,
-                cert.tbs_certificate_bytes,
-                padding.PKCS1v15(),
-                cert.signature_hash_algorithm,
-            )
-        elif isinstance(root_pubkey, ec.EllipticCurvePublicKey):
-            root_pubkey.verify(
-                cert.signature,
-                cert.tbs_certificate_bytes,
-                ec.ECDSA(cert.signature_hash_algorithm),
-            )
-        else:
-            print("[!] Unsupported CA key type")
-            return False
-
-        return True
-
-    except InvalidSignature:
-        print("[!] Certificate signature invalid")
-        return False
