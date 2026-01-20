@@ -4,7 +4,6 @@ from cryptography.hazmat.primitives.asymmetric import rsa, ec, padding
 from cryptography.exceptions import InvalidSignature
 from datetime import datetime, timedelta, timezone
 
-
 TRUSTED_ROOT_PATH = "client_path/trusted_root_store/root_cert.pem"
 FILE_CERT_PATH = "client_path/trusted_root_store/file_sign_cert.pem"
 

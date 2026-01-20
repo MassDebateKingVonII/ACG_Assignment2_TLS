@@ -1,8 +1,12 @@
 import os, json, base64
 
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.backends import default_backend
+
+from utils.socket_utils import recv_all
 from client.utils.CSR_utils import (
     generate_csr,
-    CSR_FILE_PATH,
     KEY_FILE_PATH,
 )
 
@@ -16,7 +20,15 @@ from utils.PKI_utils import (
 
 CLIENT_CERT_PATH = os.path.join("client_path", "certificates")
 
-from utils.socket_utils import recv_all
+def derive_passphrase(password: str, salt: bytes) -> bytes:
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=salt,
+        iterations=100_000,
+        backend=default_backend()
+    )
+    return kdf.derive(password.encode())
         
 def authenticate_client_gui(conn, action, username, password):
     # wait for AUTH
@@ -38,17 +50,36 @@ def authenticate_client_gui(conn, action, username, password):
     resp = recv_all(conn, resp_len)
 
     if resp == b"LOGGED_IN":
+        salt_file = os.path.join(KEY_FILE_PATH, f"salt_{username}.bin")
+        if not os.path.exists(salt_file):
+            raise ValueError("Salt file missing. Cannot derive key passphrase.")
+
+        with open(salt_file, "rb") as f:
+            salt = f.read()
+
         conn.username = username
+        conn.key_passphrase = derive_passphrase(password, salt)
+        
         return True, "OK"
 
     if resp == b"REGISTERING":
-        # CSR flow (reuse your existing code)
-        csr_pem, key_pem = generate_csr(username)
-
+        # CSR flow with encrypted private key
+        salt = os.urandom(16)
+        key_passphrase = derive_passphrase(password, salt)
+        csr_pem, key_pem = generate_csr(username, key_passphrase)
+        
+        # Save Salt
+        os.makedirs(KEY_FILE_PATH, exist_ok=True)
+        salt_file = os.path.join(KEY_FILE_PATH, f"salt_{username}.bin")
+        with open(salt_file, "wb") as f:
+            f.write(salt)
+            
+        # Save encrypted private key
         key_file = os.path.join(KEY_FILE_PATH, f"{username}_key.pem")
         with open(key_file, "wb") as f:
             f.write(key_pem)
 
+        # CSR payload
         csr_payload = {
             "action": "submit_csr",
             "username": username,
@@ -59,6 +90,7 @@ def authenticate_client_gui(conn, action, username, password):
         conn.send(len(csr_bytes).to_bytes(8, "big"))
         conn.send(csr_bytes)
 
+        # Receive signed certificate
         cert_len = int.from_bytes(recv_all(conn, 8), "big")
         signed_cert = recv_all(conn, cert_len)
 

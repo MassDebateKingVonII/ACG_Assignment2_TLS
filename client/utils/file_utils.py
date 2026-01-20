@@ -1,11 +1,11 @@
 import os, base64, json
 
+from client.utils.CSR_utils import KEY_FILE_PATH
+
 from utils.socket_utils import recv_all
 from utils.PKI_utils import sign_bytes, verify_bytes
 from utils.hash_utils import sha256
 from utils.cert_utils import load_private_key
-
-KEY_DIR = os.path.join('client_path', 'certificates')
 
 # ---------------- SEND FILE ----------------
 def send_file(conn, filepath, username, server_pubkey):
@@ -19,8 +19,10 @@ def send_file(conn, filepath, username, server_pubkey):
         server_pubkey: server's public key for verifying receipt
     """
 
-    key_file = os.path.join(KEY_DIR, f"{username}_key.pem")
+    key_file = os.path.join(KEY_FILE_PATH, f"{username}_key.pem")
     filename = os.path.basename(filepath)
+    
+    key_passphrase = conn.key_passphrase
 
     # Read file bytes
     with open(filepath, "rb") as f:
@@ -30,7 +32,7 @@ def send_file(conn, filepath, username, server_pubkey):
     file_hash = sha256(file_bytes)
 
     # Sign hash with client's private key
-    private_key = load_private_key(key_file, None)
+    private_key = load_private_key(key_file, key_passphrase)
     file_signature = sign_bytes(private_key, file_hash)
 
     # Build payload
