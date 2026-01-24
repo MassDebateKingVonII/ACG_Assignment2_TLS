@@ -1,8 +1,6 @@
 import os, socket, ssl, json, base64, io
-
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
-
 from PIL import Image, ImageTk
 
 from utils.socket_utils import recv_all
@@ -32,7 +30,6 @@ class FileClientGUI:
             master.destroy()
             return
 
-        # SSL/TLS setup
         self.context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
         self.context.minimum_version = ssl.TLSVersion.TLSv1_3
         self.context.load_verify_locations(TRUSTED_ROOT_PATH)
@@ -40,17 +37,49 @@ class FileClientGUI:
 
         self.connect_to_server()
 
-        # Build frames
+        self.load_file_icons()
+
         self.build_auth_pages()
         self.build_file_page()
 
-        # Show only auth first
         self.show_login_page()
 
     def connect_to_server(self):
         raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.conn = self.context.wrap_socket(raw_sock, server_hostname=HOST)
         self.conn.connect((HOST, PORT))
+
+    # ---------- ICONS ----------
+
+    def load_file_icons(self):
+        base = os.path.join(os.path.dirname(__file__), "icons")
+
+        def load_icon(filename):
+            img = Image.open(os.path.join(base, filename)).convert("RGBA")
+            img = img.resize((16, 16), Image.Resampling.LANCZOS)  # resize to 16x16
+            return ImageTk.PhotoImage(img)
+
+        self.file_icons = {
+            "txt": load_icon("text.png"),
+            "md": load_icon("text.png"),
+            "jpg": load_icon("image.png"),
+            "jpeg": load_icon("image.png"),
+            "png": load_icon("image.png"),
+            "gif": load_icon("image.png"),
+            "pdf": load_icon("pdf.png"),
+            "zip": load_icon("zip.png"),
+            "rar": load_icon("zip.png"),
+            "7z": load_icon("zip.png"),
+            "py": load_icon("code.png"),
+            "js": load_icon("code.png"),
+            "html": load_icon("code.png"),
+            "css": load_icon("code.png"),
+            "_default": load_icon("unknown.png"),
+        }
+
+    def get_icon_for_file(self, filename):
+        ext = filename.lower().split('.')[-1] if '.' in filename else ''
+        return self.file_icons.get(ext, self.file_icons["_default"])
 
     # ---------- AUTH UI ----------
 
@@ -63,7 +92,6 @@ class FileClientGUI:
 
         self.build_login_page()
         self.build_register_page()
-
 
     def build_login_page(self):
         f = self.login_frame
@@ -127,7 +155,7 @@ class FileClientGUI:
             self.username = username
             self.auth_container.grid_forget()
             self.file_frame.grid(row=0, column=0, sticky="nsew")
-            self.list_files()  # populate files immediately
+            self.list_files()
         else:
             messagebox.showerror("Login Failed", msg)
 
@@ -152,6 +180,9 @@ class FileClientGUI:
     # ---------- FILE PAGE ----------
 
     def build_file_page(self):
+        style = ttk.Style()
+        style.configure("Treeview", rowheight=20)  # 20 pixels should fit 16x16 icons
+
         self.file_frame = tk.Frame(self.master)
         self.file_frame.rowconfigure(1, weight=1)
         self.file_frame.columnconfigure(0, weight=1)
@@ -164,13 +195,19 @@ class FileClientGUI:
         tk.Button(top, text="Download File", command=self.download_file_gui).pack(side=tk.LEFT, padx=5)
 
         columns = ('filename', 'uploaded_by', 'created_at')
-        self.tree = ttk.Treeview(self.file_frame, columns=columns, show='headings')
+        self.tree = ttk.Treeview(self.file_frame, columns=columns, show='tree headings')
+
+        self.tree.heading('#0', text='Type')
+        self.tree.column('#0', width=40, anchor='center')
+
         self.tree.heading('filename', text='Filename')
         self.tree.heading('uploaded_by', text='Uploaded By')
         self.tree.heading('created_at', text='Created At')
+
         self.tree.column('filename', width=400)
         self.tree.column('uploaded_by', width=150)
         self.tree.column('created_at', width=150)
+
         self.tree.grid(row=1, column=0, sticky="nsew", padx=5, pady=5)
         self.tree.bind("<Double-1>", self.preview_file_gui)
 
@@ -185,15 +222,20 @@ class FileClientGUI:
         self.list_files()
 
     def list_files(self):
-        files = get_file_list(self.conn)  # expects list of dicts
+        files = get_file_list(self.conn)
         self._files_data = files
 
-        # clear tree
         for row in self.tree.get_children():
             self.tree.delete(row)
 
         for f in files:
-            self.tree.insert('', tk.END, values=(f['filename'], f['uploaded_by'], f['created_at']))
+            icon = self.get_icon_for_file(f['filename'])
+            self.tree.insert(
+                '',
+                tk.END,
+                image=icon,
+                values=(f['filename'], f['uploaded_by'], f['created_at'])
+            )
 
     def download_file_gui(self):
         sel = self.tree.selection()
@@ -202,6 +244,7 @@ class FileClientGUI:
             return
         idx = self.tree.index(sel[0])
         file_info = self._files_data[idx]
+
         save_path = filedialog.asksaveasfilename(
             initialfile=file_info['filename'],
             title="Save file as"
@@ -217,15 +260,9 @@ class FileClientGUI:
         sel = self.tree.selection()
         if not sel:
             return
+
         idx = self.tree.index(sel[0])
-        if not self._files_data or idx >= len(self._files_data):
-            return
-
         file_info = self._files_data[idx]
-        if not file_info or 'filename' not in file_info:
-            messagebox.showerror("Error", "File info not available")
-            return
-
         self.preview_file(self.conn, file_info['filename'])
 
     # ---------- PREVIEW WINDOW ----------
@@ -252,34 +289,24 @@ class FileClientGUI:
         win = tk.Toplevel(self.master)
         win.title(f"Preview: {filename}")
         win.geometry("700x500")
-        win.rowconfigure(0, weight=1)
-        win.columnconfigure(0, weight=1)
 
         if filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
             original_img = Image.open(io.BytesIO(preview_bytes))
             self._imgtk = ImageTk.PhotoImage(original_img)
 
-            # Resize window to at least image size
-            win.geometry(f"{original_img.width}x{original_img.height}")
+            canvas = tk.Canvas(win, bg="black")
+            canvas.pack(fill="both", expand=True)
 
-            # Use canvas to allow centering on window resize
-            canvas = tk.Canvas(win, width=original_img.width, height=original_img.height, bg="black")
-            canvas.grid(row=0, column=0, sticky="nsew")
+            canvas_img = canvas.create_image(0, 0, anchor="center", image=self._imgtk)
 
-            # Center the image
-            canvas_img = canvas.create_image(original_img.width//2, original_img.height//2, image=self._imgtk, anchor="center")
-
-            # Make canvas resize with window
             def center_image(event):
-                canvas_width = event.width
-                canvas_height = event.height
-                canvas.coords(canvas_img, canvas_width//2, canvas_height//2)
+                canvas.coords(canvas_img, event.width // 2, event.height // 2)
 
             canvas.bind("<Configure>", center_image)
 
         else:
             text_area = scrolledtext.ScrolledText(win, wrap=tk.WORD)
-            text_area.grid(row=0, column=0, sticky="nsew")
+            text_area.pack(fill="both", expand=True)
             try:
                 text_area.insert(tk.END, preview_bytes.decode("utf-8"))
             except:
