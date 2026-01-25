@@ -8,40 +8,38 @@ from cryptography.exceptions import InvalidSignature
     
 # ---------------- VERIFY CERTIFICATE ----------------
 def verify_cert_signed_by_root(cert_pem: bytes, root_cert_pem: bytes) -> bool:
+    """
+    Verify that a certificate is valid and signed by the given RSA root certificate.
+
+    Returns True if valid and signature matches, False otherwise.
+    """
     cert = x509.load_pem_x509_certificate(cert_pem)
     root_cert = x509.load_pem_x509_certificate(root_cert_pem)
     root_pubkey = root_cert.public_key()
 
-    # Use offset-aware properties
+    # Check certificate validity period
     now = datetime.now(timezone.utc)
-    if now < cert.not_valid_before_utc or now > cert.not_valid_after_utc:
+    if now < cert.not_valid_before or now > cert.not_valid_after:
         print("[!] Certificate expired or not yet valid")
         return False
 
+    # Ensure root key is RSA
+    if not isinstance(root_pubkey, rsa.RSAPublicKey):
+        print("[!] Root CA key is not RSA")
+        return False
+
+    # Verify certificate signature
     try:
-        if isinstance(root_pubkey, rsa.RSAPublicKey):
-            root_pubkey.verify(
-                cert.signature,
-                cert.tbs_certificate_bytes,
-                padding.PKCS1v15(),
-                cert.signature_hash_algorithm,
-            )
-        elif isinstance(root_pubkey, ec.EllipticCurvePublicKey):
-            root_pubkey.verify(
-                cert.signature,
-                cert.tbs_certificate_bytes,
-                ec.ECDSA(cert.signature_hash_algorithm),
-            )
-        else:
-            print("[!] Unsupported CA key type")
-            return False
-
+        root_pubkey.verify(
+            cert.signature,
+            cert.tbs_certificate_bytes,
+            padding.PKCS1v15(),
+            cert.signature_hash_algorithm,
+        )
         return True
-
     except InvalidSignature:
         print("[!] Certificate signature invalid")
         return False
-
 
 # ---------------- SIGN/VERIFY FILES ----------------
 def sign_bytes(private_key, data: bytes) -> bytes:
