@@ -44,4 +44,3 @@ def get_user_pubkey(id : int):
     user = get_user_by_user_id(id)
     cert_path = user[cert_path]
     return cert_path
-    

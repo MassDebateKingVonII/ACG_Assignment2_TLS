@@ -141,10 +141,8 @@ def handle_client(conn, addr, file_key):
                             cert_path = os.path.join(CERT_DIR, f"{username}.pem")
                             with open(cert_path, "wb") as f:
                                 f.write(signed_cert)
-
-                            conn.send(len(signed_cert).to_bytes(8, "big"))
-                            conn.send(signed_cert)
-
+                                
+                            send_resp(conn, signed_cert)
                             register_user(username, password, cert_path)
 
                             print(f"[+] Signed certificate sent to {username}")
@@ -157,8 +155,8 @@ def handle_client(conn, addr, file_key):
                         except Exception as e:
                             print(f"[!] Error signing CSR for {username}: {e}")
                             error_msg = json.dumps({"error": str(e)}).encode()
-                            conn.send(len(error_msg).to_bytes(8, "big"))
-                            conn.send(error_msg)
+                            send_resp(conn, error_msg)
+
                 except Exception as e:
                     print(f"[!] Error handling CSR after registration: {e}")
                     return
@@ -233,8 +231,7 @@ def handle_client(conn, addr, file_key):
                                                  
                         except Exception as e:
                             payload = json.dumps({"error": str(e)}).encode()
-                            conn.send(len(payload).to_bytes(8, "big"))
-                            conn.send(payload)
+                            send_resp(conn, payload)
                             continue
 
                         # For preview, encode as Base64 (so client can handle safely)
@@ -243,8 +240,7 @@ def handle_client(conn, addr, file_key):
                             "preview": plaintext_b64
                         }).encode()
 
-                        conn.send(len(payload).to_bytes(8, "big"))
-                        conn.send(payload)
+                        send_resp(conn, payload)
                         print(f"[+] Sent preview for {filename} to {conn.username}")
                             
                     elif cmd == b"LIST":
@@ -254,8 +250,7 @@ def handle_client(conn, addr, file_key):
 
                             # Send JSON-encoded length-prefixed response
                             payload = json.dumps(files, default=str).encode()  # default=str handles datetime
-                            conn.send(len(payload).to_bytes(8, 'big'))  # 8-byte length prefix
-                            conn.send(payload)
+                            send_resp(conn, payload)
 
                             print(f"[+] Sent full file info to {conn.username}")
                             continue
@@ -264,8 +259,7 @@ def handle_client(conn, addr, file_key):
                             print(f"[!] Error sending file list to {conn.username}: {e}")
                             # Send empty list on error
                             payload = json.dumps([]).encode()
-                            conn.send(len(payload).to_bytes(8, 'big'))
-                            conn.send(payload)
+                            send_resp(conn, payload)
                             continue
                         
                     elif cmd == b"DOWN":
@@ -284,18 +278,15 @@ def handle_client(conn, addr, file_key):
                         file_data = get_encrypted_file_controller(filename)
                         if not file_data:
                             payload = json.dumps({"error": "File does not exist"}).encode()
-                            conn.send(len(payload).to_bytes(8, "big"))
-                            conn.send(payload)
+                            send_resp(conn, payload)
                             continue
 
                         payload_bytes = json.dumps(file_data).encode()
-                        conn.send(len(payload_bytes).to_bytes(8, "big"))
-                        conn.send(payload_bytes)
+                        send_resp(conn, payload_bytes)
                         
                         receipt = create_download_receipt(filename, conn.username, conn.userid, file_key)
                         receipt_bytes = json.dumps(receipt).encode()
-                        conn.send(len(receipt_bytes).to_bytes(8, "big"))
-                        conn.send(receipt_bytes)
+                        send_resp(conn, receipt_bytes)
 
                         print(f"[+] Sent file {filename} to {conn.username}")
                             

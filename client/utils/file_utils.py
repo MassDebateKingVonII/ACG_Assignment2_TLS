@@ -2,7 +2,7 @@ import os, base64, json
 
 from client.utils.CSR_utils import KEY_FILE_PATH
 
-from utils.socket_utils import recv_all
+from utils.socket_utils import send_resp, recv_all
 from utils.PKI_utils import sign_bytes, verify_bytes
 from utils.hash_utils import sha256
 from utils.cert_utils import load_private_key
@@ -44,8 +44,7 @@ def send_file(conn, filepath, username, server_pubkey):
 
     # Send file command and payload
     conn.send(b"FILE")
-    conn.send(len(payload).to_bytes(8, "big"))
-    conn.send(payload)
+    send_resp(conn, payload)
     print(f"[+] Sent file: {filename}")
 
     # Wait for receipt from server
@@ -100,8 +99,7 @@ def download_file(conn, filename, file_pubkey, save_path):
     # ---------------- REQUEST FILE ----------------
     conn.send(b"DOWN")
     fname_bytes = filename.encode()
-    conn.send(len(fname_bytes).to_bytes(8, "big"))
-    conn.send(fname_bytes)
+    send_resp(conn, fname_bytes)
 
     # ---------------- RECEIVE FILE ----------------
     length_bytes = recv_all(conn, 8)

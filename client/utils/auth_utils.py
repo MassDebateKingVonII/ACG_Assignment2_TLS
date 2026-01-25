@@ -4,7 +4,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.backends import default_backend
 
-from utils.socket_utils import recv_all
+from utils.socket_utils import send_resp, recv_all
 from client.utils.CSR_utils import (
     generate_csr,
     KEY_FILE_PATH,
@@ -43,8 +43,7 @@ def authenticate_client_gui(conn, action, username, password):
     }
 
     data = json.dumps(payload).encode()
-    conn.send(len(data).to_bytes(8, "big"))
-    conn.send(data)
+    send_resp(conn, data)
 
     resp_len = int.from_bytes(recv_all(conn, 8), "big")
     resp = recv_all(conn, resp_len)
@@ -87,8 +86,7 @@ def authenticate_client_gui(conn, action, username, password):
         }
 
         csr_bytes = json.dumps(csr_payload).encode()
-        conn.send(len(csr_bytes).to_bytes(8, "big"))
-        conn.send(csr_bytes)
+        send_resp(conn, csr_bytes)
 
         # Receive signed certificate
         cert_len = int.from_bytes(recv_all(conn, 8), "big")

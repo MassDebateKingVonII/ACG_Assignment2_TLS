@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from PIL import Image, ImageTk
 
-from utils.socket_utils import recv_all
+from utils.socket_utils import send_resp, recv_all
 from client.utils.certificateValidation import TRUSTED_ROOT_PATH, load_file_signing_public_key
 from client.utils.file_utils import send_file, download_file, get_file_list
 from client.utils.auth_utils import authenticate_client_gui
@@ -270,8 +270,7 @@ class FileClientGUI:
     def preview_file(self, conn, filename):
         conn.send(b"PREV")
         fname_bytes = filename.encode()
-        conn.send(len(fname_bytes).to_bytes(8, "big"))
-        conn.send(fname_bytes)
+        send_resp(conn, fname_bytes)
 
         length_bytes = recv_all(conn, 8)
         if not length_bytes:
