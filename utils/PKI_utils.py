@@ -7,19 +7,21 @@ from cryptography.hazmat.primitives.asymmetric import ec, rsa, padding
 from cryptography.exceptions import InvalidSignature
     
 # ---------------- VERIFY CERTIFICATE ----------------
+
 def verify_cert_signed_by_root(cert_pem: bytes, root_cert_pem: bytes) -> bool:
     """
     Verify that a certificate is valid and signed by the given RSA root certificate.
-
     Returns True if valid and signature matches, False otherwise.
     """
     cert = x509.load_pem_x509_certificate(cert_pem)
     root_cert = x509.load_pem_x509_certificate(root_cert_pem)
     root_pubkey = root_cert.public_key()
 
-    # Check certificate validity period
+    # Use UTC-aware datetimes
     now = datetime.now(timezone.utc)
-    if now < cert.not_valid_before or now > cert.not_valid_after:
+
+    # Use the new UTC-aware properties
+    if now < cert.not_valid_before_utc or now > cert.not_valid_after_utc:
         print("[!] Certificate expired or not yet valid")
         return False
 
