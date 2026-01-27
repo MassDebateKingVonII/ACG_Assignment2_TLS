@@ -12,7 +12,6 @@ def verify_client_signature(payload, user_id):
     Middleware to verify the signature sent by the client.
     Returns True if valid and certificate is trusted, False otherwise.
     """
-    import base64
 
     file_bytes = base64.b64decode(payload["content"])
     client_signature = base64.b64decode(payload["signature"])
