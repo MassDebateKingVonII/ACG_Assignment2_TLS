@@ -1,7 +1,7 @@
 from cryptography.hazmat.primitives import serialization
 from cryptography import x509
 
-def load_private_key(path: str, passphrase=None):  # Remove type hint for passphrase
+def load_private_key(path: str, passphrase=None):
     """
     Load a PEM-encoded private key from disk.
 
