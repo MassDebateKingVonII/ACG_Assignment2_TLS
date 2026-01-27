@@ -45,7 +45,7 @@
 
 ## Running the Server & Client
 
-1. **Initialise the database**
+1. **Initialise the database (For first time only, otherwise skip)**
 
     ```bash
     python -m server.config.init_db
@@ -57,7 +57,7 @@
     python -m server.main
     ```
 
-> *Note:* This generates multiple certificates, notably `root_cert.pem` and `file_sign_cert.pem`. Copy it to:
+> *Note:* This generates multiple certificates under `server/certificates`, for the first time, notably `root_cert.pem` and `file_sign_cert.pem`. Copy it to:
 
     client_path/trusted_root_store
 
@@ -68,6 +68,10 @@
     python -m client.main
     ```
 
-4. **Register a user first**  
+4. **Register a user first** 
+
+
+Ensure the password is complex enough otherwise it will be rejected 
+
 5. **Login after registering**
 6. **Use the GUI to upload or download files**
