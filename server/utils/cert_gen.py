@@ -124,7 +124,6 @@ def generate_root_ca():
     return load_or_generate_cert(
         ROOT_KEY_PATH, ROOT_CERT_PATH, "Root CA",
         is_ca=True,
-        eku=[ExtendedKeyUsageOID.SERVER_AUTH, ExtendedKeyUsageOID.CLIENT_AUTH],
         key_passphrase=ROOT_KEY_PASSPHRASE,
         validity_days=3650
     )
