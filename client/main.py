@@ -76,6 +76,19 @@ class FileClientGUI:
             "css": load_icon("code.png"),
             "_default": load_icon("unknown.png"),
         }
+        
+        # --- UI button icons (keep references on self) ---
+        def load_ui_icon(filename, size=(16, 16)):
+            img = Image.open(os.path.join(base, filename)).convert("RGBA")
+            img = img.resize(size, Image.Resampling.LANCZOS)
+            return ImageTk.PhotoImage(img)
+
+        self.ui_icons = {
+            "upload": load_ui_icon("upload.png"),
+            "download": load_ui_icon("download.png"),
+            "list": load_ui_icon("list.png"),
+            "logout": load_ui_icon("logout.png"),
+        }
 
     def get_icon_for_file(self, filename):
         ext = filename.lower().split('.')[-1] if '.' in filename else ''
@@ -158,6 +171,37 @@ class FileClientGUI:
             self.list_files()
         else:
             messagebox.showerror("Login Failed", msg)
+            
+    def logout(self):
+        if not self.conn:
+            return
+
+        try:
+            self.conn.send(b"LOGO")
+            # read ack (length-prefixed because send_resp is used on server)
+            resp_len = int.from_bytes(recv_all(self.conn, 8), "big")
+            _ = recv_all(self.conn, resp_len)
+        except:
+            pass
+
+        # Close and reconnect so AUTH handshake is clean
+        try:
+            self.conn.close()
+        except:
+            pass
+
+        self.conn = None
+        self.username = None
+
+        # Reset UI
+        self.file_frame.grid_forget()
+        self.show_login_page()
+
+        # Reconnect (so the next login works)
+        try:
+            self.connect_to_server()
+        except Exception as e:
+            messagebox.showerror("Connection Error", str(e))
 
     def register(self):
         username = self.reg_user.get().strip()
@@ -190,9 +234,40 @@ class FileClientGUI:
         top = tk.Frame(self.file_frame)
         top.grid(row=0, column=0, sticky="ew")
 
-        tk.Button(top, text="Upload File", command=self.upload_file).pack(side=tk.LEFT, padx=5)
-        tk.Button(top, text="List Files", command=self.list_files).pack(side=tk.LEFT, padx=5)
-        tk.Button(top, text="Download File", command=self.download_file_gui).pack(side=tk.LEFT, padx=5)
+        # Left-aligned actions
+        tk.Button(
+            top,
+            text="Upload File",
+            image=self.ui_icons["upload"],
+            compound="left",
+            command=self.upload_file
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            top,
+            text="List Files",
+            image=self.ui_icons["list"],
+            compound="left",
+            command=self.list_files
+        ).pack(side=tk.LEFT, padx=5)
+
+        tk.Button(
+            top,
+            text="Download File",
+            image=self.ui_icons["download"],
+            compound="left",
+            command=self.download_file_gui
+        ).pack(side=tk.LEFT, padx=5)
+
+        # Right-aligned logout
+        tk.Button(
+            top,
+            text="Logout",
+            image=self.ui_icons["logout"],
+            compound="left",
+            command=self.logout
+        ).pack(side=tk.RIGHT, padx=5)
+
 
         columns = ('filename', 'uploaded_by', 'created_at')
         self.tree = ttk.Treeview(self.file_frame, columns=columns, show='tree headings')

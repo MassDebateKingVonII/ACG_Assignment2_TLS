@@ -185,6 +185,18 @@ def handle_client(conn, addr, file_key):
                     if not cmd:
                         print(f"[-] Client {addr} disconnected")
                         break
+                    
+                    elif cmd == b"LOGO":
+                        # Clear authenticated state for this connection
+                        conn.username = None
+                        conn.userid = None
+                        user = None
+
+                        send_resp(conn, b"LOGGED_OUT")
+                        print(f"[+] User logged out for {addr}")
+
+                        # Break out of file loop so it goes back to auth loop
+                        break
 
                     if cmd == b"QUIT":
                         print(f"[-] Client {addr} disconnected via QUIT")
