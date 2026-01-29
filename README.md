@@ -29,6 +29,10 @@
 4. **Create a `.env` file**
 
     ```bash
+    SERVER_HOSTNAME=<hostname of server>
+    SERVER_IP=x.x.x.x
+    SERVER_PORT=<Port No.>
+
     DB_HOST=<yourdbhostname>
     DB_USER=<yourdbusername>
     DB_PASS=<yourdbpassword>

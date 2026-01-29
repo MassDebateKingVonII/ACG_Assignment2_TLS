@@ -1,5 +1,10 @@
 import os, socket, ssl, json, base64, io
 import tkinter as tk
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from PIL import Image, ImageTk
 
@@ -8,9 +13,8 @@ from client.utils.certificateValidation import TRUSTED_ROOT_PATH, load_file_sign
 from client.utils.file_utils import send_file, download_file, get_file_list
 from client.utils.auth_utils import authenticate_client_gui
 
-HOST = '127.0.0.1'
-PORT = 5001
-
+HOST = os.getenv("SERVER_IP")
+PORT = int(os.getenv("SERVER_PORT"))
 
 class FileClientGUI:
     def __init__(self, master):

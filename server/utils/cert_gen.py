@@ -130,10 +130,10 @@ def generate_root_ca():
 
 
 # ---------------- GENERATE SERVER CERT ----------------
-def generate_server_certificate(root_key, root_cert, common_name="localhost"):
+def generate_server_certificate(root_key, root_cert, common_name="localhost", ip_address="127.0.0.1"):
     san = x509.SubjectAlternativeName([
         x509.DNSName(common_name),
-        x509.IPAddress(ipaddress.IPv4Address("127.0.0.1"))
+        x509.IPAddress(ipaddress.IPv4Address(ip_address))
     ])
     return load_or_generate_cert(
         SERVER_KEY_PATH, SERVER_CERT_PATH, common_name,

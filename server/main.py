@@ -1,9 +1,8 @@
-import os
-import socket
-import ssl
-import threading
-import json
-import base64
+import os, socket, ssl, threading, json, base64
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from utils.socket_utils import recv_all, send_resp
 
@@ -41,8 +40,9 @@ from server.middleware.userMiddleware import (
     check_password_complexity
 )
 
-HOST = '127.0.0.1'
-PORT = 5001
+HOST = os.getenv("SERVER_IP")
+HOSTNAME = os.getenv("SERVER_HOSTNAME")
+PORT = int(os.getenv("SERVER_PORT"))
 
 server_running = True
 server_socket = None
@@ -345,7 +345,7 @@ def main():
 
     # Generate/load root CA and server certificate
     root_key, root_cert = generate_root_ca()
-    server_key, server_cert = generate_server_certificate(root_key, root_cert)
+    server_key, server_cert = generate_server_certificate(root_key, root_cert, common_name=HOSTNAME, ip_address=HOST)
     file_key, file_cert = generate_file_signing_key(root_key, root_cert)
 
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
