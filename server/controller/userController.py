@@ -42,5 +42,5 @@ def get_user_pubkey(id : int):
     Gets the public key (certificate) of the user by id
     """
     user = get_user_by_user_id(id)
-    cert_path = user[cert_path]
+    cert_path = user["cert_path"]
     return cert_path
