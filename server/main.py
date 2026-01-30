@@ -30,7 +30,8 @@ from server.controller.fileController import (
 from server.middleware.fileMiddleware import (
     verify_client_signature,
     create_upload_receipt,
-    create_download_receipt
+    create_download_receipt,
+    create_preview_receipt,
 )
 
 from server.controller.userController import (
@@ -46,6 +47,7 @@ PORT = int(os.getenv("SERVER_PORT"))
 
 server_running = True
 server_socket = None
+mek_rotation_lock = threading.RLock() # Prevent file from uplaoding or downloading when rotation of MEK is happening
 
 # ---------------- CLIENT HANDLER ----------------
 def handle_client(conn, addr, file_key):
@@ -203,57 +205,75 @@ def handle_client(conn, addr, file_key):
                         break
 
                     if cmd == b"FILE":
-                        length = int.from_bytes(recv_all(conn, 8), "big")
-                        data = recv_all(conn, length)
-                        payload = json.loads(data.decode())
-                        
-                        user_id = conn.userid
-                        username = conn.username
+                        with mek_rotation_lock:
+                            length = int.from_bytes(recv_all(conn, 8), "big")
+                            data = recv_all(conn, length)
+                            payload = json.loads(data.decode())
+                            
+                            user_id = conn.userid
+                            username = conn.username
 
-                        # Middleware verification
-                        if verify_client_signature(payload, user_id):
-                            saved_file = save_file_controller(payload, file_key, user_id)
-                            print(f"[+] File saved from {username}: {saved_file}")
+                            # Middleware verification
+                            if verify_client_signature(payload, user_id):
+                                saved_file = save_file_controller(payload, file_key, user_id)
+                                print(f"[+] File saved from {username}: {saved_file}")
 
-                            try:
-                                receipt = create_upload_receipt(payload, saved_file, username, user_id, file_key)
-                                send_resp(conn, json.dumps(receipt).encode())
-                                print(f"[+] Sent receipt to {username} for {saved_file}")
-                            except Exception as e:
-                                print(f"[!] Error sending receipt: {e}")
-                                send_resp(conn, b"RECEIPT_FAILED")
-                        else:
-                            print(f"[!] Invalid client signature from {username}")
+                                try:
+                                    receipt = create_upload_receipt(payload, saved_file, username, user_id, file_key)
+                                    send_resp(conn, json.dumps(receipt).encode())
+                                    print(f"[+] Sent receipt to {username} for {saved_file}")
+                                except Exception as e:
+                                    print(f"[!] Error sending receipt: {e}")
+                                    send_resp(conn, b"RECEIPT_FAILED")
+                            else:
+                                print(f"[!] Invalid client signature from {username}")
                             
                     elif cmd == b"PREV":
-                        # Receive filename
-                        fname_len_bytes = recv_all(conn, 8)
-                        if not fname_len_bytes:
-                            continue
-                        fname_len = int.from_bytes(fname_len_bytes, "big")
-                        filename_bytes = recv_all(conn, fname_len)
-                        if not filename_bytes:
-                            continue
-                        filename = filename_bytes.decode()
+                        with mek_rotation_lock:
+                            # Receive filename
+                            fname_len_bytes = recv_all(conn, 8)
+                            if not fname_len_bytes:
+                                continue
+                            fname_len = int.from_bytes(fname_len_bytes, "big")
+                            filename_bytes = recv_all(conn, fname_len)
+                            if not filename_bytes:
+                                continue
+                            filename = filename_bytes.decode()
 
-                        # Load decrypted file in memory
-                        try:
-                            result = get_encrypted_file_controller(filename)
-                            plaintext_b64 = result["content"]  # already a string       
-                                                 
-                        except Exception as e:
-                            payload = json.dumps({"error": str(e)}).encode()
-                            send_resp(conn, payload)
-                            continue
+                            try:
+                                result = get_encrypted_file_controller(filename)
+                                if not result:
+                                    payload = json.dumps({"error": "File does not exist"}).encode()
+                                    send_resp(conn, payload)
+                                    continue
+                                
+                                plaintext_b64 = result["content"]
+                                file_sig_b64 = result.get("file_signature")
 
-                        # For preview, encode as Base64 (so client can handle safely)
-                        payload = json.dumps({
-                            "filename": filename,
-                            "preview": plaintext_b64
-                        }).encode()
+                            except Exception as e:
+                                payload = json.dumps({"error": str(e)}).encode()
+                                send_resp(conn, payload)
+                                continue
 
-                        send_resp(conn, payload)
-                        print(f"[+] Sent preview for {filename} to {conn.username}")
+                            # 1) Send preview payload (like DOWN sends file_data)
+                            preview_payload = {
+                                "filename": filename,
+                                "preview": plaintext_b64
+                            }
+                            if file_sig_b64 is not None:
+                                preview_payload["file_signature"] = file_sig_b64
+
+                            send_resp(conn, json.dumps(preview_payload).encode())
+
+                            # 2) Send server preview receipt (like DOWN sends receipt)
+                            try:
+                                receipt = create_preview_receipt(filename, conn.username, conn.userid, file_key)
+                                send_resp(conn, json.dumps(receipt).encode())
+                            except Exception as e:
+                                print(f"[!] Failed to create/send preview receipt: {e}")
+                                send_resp(conn, b"RECEIPT_FAILED")
+
+                            print(f"[+] Sent preview for {filename} to {conn.username}")
                             
                     elif cmd == b"LIST":
                         try:
@@ -275,32 +295,33 @@ def handle_client(conn, addr, file_key):
                             continue
                         
                     elif cmd == b"DOWN":
-                        # Receive filename
-                        fname_len_bytes = recv_all(conn, 8)
-                        if not fname_len_bytes:
-                            print("[-] Client disconnected")
-                            continue
-                        fname_len = int.from_bytes(fname_len_bytes, "big")
-                        filename_bytes = recv_all(conn, fname_len)
-                        if not filename_bytes:
-                            print("[-] Client disconnected")
-                            continue
-                        filename = filename_bytes.decode()
+                        with mek_rotation_lock:
+                            # Receive filename
+                            fname_len_bytes = recv_all(conn, 8)
+                            if not fname_len_bytes:
+                                print("[-] Client disconnected")
+                                continue
+                            fname_len = int.from_bytes(fname_len_bytes, "big")
+                            filename_bytes = recv_all(conn, fname_len)
+                            if not filename_bytes:
+                                print("[-] Client disconnected")
+                                continue
+                            filename = filename_bytes.decode()
 
-                        file_data = get_encrypted_file_controller(filename)
-                        if not file_data:
-                            payload = json.dumps({"error": "File does not exist"}).encode()
-                            send_resp(conn, payload)
-                            continue
+                            file_data = get_encrypted_file_controller(filename)
+                            if not file_data:
+                                payload = json.dumps({"error": "File does not exist"}).encode()
+                                send_resp(conn, payload)
+                                continue
 
-                        payload_bytes = json.dumps(file_data).encode()
-                        send_resp(conn, payload_bytes)
-                        
-                        receipt = create_download_receipt(filename, conn.username, conn.userid, file_key)
-                        receipt_bytes = json.dumps(receipt).encode()
-                        send_resp(conn, receipt_bytes)
+                            payload_bytes = json.dumps(file_data).encode()
+                            send_resp(conn, payload_bytes)
+                            
+                            receipt = create_download_receipt(filename, conn.username, conn.userid, file_key)
+                            receipt_bytes = json.dumps(receipt).encode()
+                            send_resp(conn, receipt_bytes)
 
-                        print(f"[+] Sent file {filename} to {conn.username}")
+                            print(f"[+] Sent file {filename} to {conn.username}")
                             
                 except (ConnectionResetError, BrokenPipeError):
                     print(f"[-] Client {addr} disconnected during file handling")

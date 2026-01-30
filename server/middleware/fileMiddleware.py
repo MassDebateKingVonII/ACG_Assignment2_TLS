@@ -91,3 +91,21 @@ def create_download_receipt(filename, username, user_id, file_key):
     receipt["server_signature"] = base64.b64encode(receipt_signature).decode()  # base64
 
     return receipt
+
+def create_preview_receipt(filename, username, user_id, file_key):
+    """
+    Generate a signed receipt for a file preview.
+    Signatures are base64-encoded.
+    """
+    receipt = {
+        "filename": filename,
+        "previewed_by": username,
+        "user_id": user_id,
+        "timestamp": int(time.time())
+    }
+
+    receipt_bytes = json.dumps(receipt).encode()
+    receipt_signature = sign_bytes(file_key, sha256(receipt_bytes))
+    receipt["server_signature"] = base64.b64encode(receipt_signature).decode()
+
+    return receipt

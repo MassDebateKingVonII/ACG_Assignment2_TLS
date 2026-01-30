@@ -10,7 +10,7 @@ from PIL import Image, ImageTk
 
 from utils.socket_utils import send_resp, recv_all
 from client.utils.certificateValidation import TRUSTED_ROOT_PATH, load_file_signing_public_key
-from client.utils.file_utils import send_file, download_file, get_file_list
+from client.utils.file_utils import send_file, download_file, get_file_list, fetch_preview_bytes
 from client.utils.auth_utils import authenticate_client_gui
 
 HOST = os.getenv("SERVER_IP")
@@ -347,22 +347,10 @@ class FileClientGUI:
     # ---------- PREVIEW WINDOW ----------
 
     def preview_file(self, conn, filename):
-        conn.send(b"PREV")
-        fname_bytes = filename.encode()
-        send_resp(conn, fname_bytes)
-
-        length_bytes = recv_all(conn, 8)
-        if not length_bytes:
+        preview_bytes = fetch_preview_bytes(conn, filename, self.file_pubkey)
+        if preview_bytes is None:
+            messagebox.showerror("Preview Error", "Failed to fetch/verify preview.")
             return
-        length = int.from_bytes(length_bytes, "big")
-        payload_bytes = recv_all(conn, length)
-        payload = json.loads(payload_bytes.decode())
-
-        if "error" in payload:
-            messagebox.showerror("Preview Error", payload["error"])
-            return
-
-        preview_bytes = base64.b64decode(payload["preview"])
 
         win = tk.Toplevel(self.master)
         win.title(f"Preview: {filename}")
@@ -389,7 +377,6 @@ class FileClientGUI:
                 text_area.insert(tk.END, preview_bytes.decode("utf-8"))
             except:
                 text_area.insert(tk.END, "[Cannot decode file]")
-
 
 if __name__ == "__main__":
     root = tk.Tk()

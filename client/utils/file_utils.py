@@ -158,3 +158,68 @@ def download_file(conn, filename, file_pubkey, save_path):
 
     except Exception as e:
         print(f"[!] Failed to verify download receipt: {e}")
+        
+def fetch_preview_bytes(conn, filename: str, file_pubkey) -> bytes | None:
+    """
+    Request a preview from server, verify file signature AND verify server preview receipt.
+    Returns preview plaintext bytes on success, else None.
+    """
+    conn.send(b"PREV")
+    send_resp(conn, filename.encode())
+
+    length_bytes = recv_all(conn, 8)
+    if not length_bytes:
+        print("[!] Server disconnected")
+        return None
+
+    length = int.from_bytes(length_bytes, "big")
+    payload_bytes = recv_all(conn, length)
+
+    try:
+        payload = json.loads(payload_bytes.decode())
+    except Exception as e:
+        print(f"[!] Invalid JSON from server: {e}")
+        return None
+
+    if "error" in payload:
+        print(f"[!] Server error: {payload['error']}")
+        return None
+
+    try:
+        preview_bytes = base64.b64decode(payload["preview"])
+        file_signature = base64.b64decode(payload["file_signature"])
+    except Exception as e:
+        print(f"[!] Bad preview payload format: {e}")
+        return None
+
+    # Must-pass integrity check
+    file_hash = sha256(preview_bytes)
+    try:
+        verify_bytes(file_pubkey, file_hash, file_signature)
+        print("[+] Preview file signature verified!")
+    except Exception as e:
+        print(f"[!] Preview file signature verification failed: {e}")
+        return None
+
+    # Best-effort receipt verification (do NOT block preview)
+    try:
+        receipt_len_bytes = recv_all(conn, 8)
+        if not receipt_len_bytes:
+            print("[!] Server disconnected before sending receipt")
+            return preview_bytes
+
+        receipt_len = int.from_bytes(receipt_len_bytes, "big")
+        receipt_bytes = recv_all(conn, receipt_len)
+        receipt = json.loads(receipt_bytes.decode())
+
+        server_sig = base64.b64decode(receipt["server_signature"])
+        receipt_copy = receipt.copy()
+        del receipt_copy["server_signature"]
+
+        receipt_hash = sha256(json.dumps(receipt_copy).encode())
+        verify_bytes(file_pubkey, receipt_hash, server_sig)
+        print(f"[+] Preview receipt verified! File {filename} preview confirmed.")
+    except Exception as e:
+        print(f"[!] Failed to verify preview receipt (preview still allowed): {e}")
+
+    return preview_bytes
