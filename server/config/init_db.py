@@ -48,7 +48,7 @@ def init_database():
                 );
             """)
 
-            # Create FIles Table
+            # Create Files Table
             print("[*] Creating table 'encrypted_files'...")
             cur.execute("""
                 CREATE TABLE encrypted_files (
