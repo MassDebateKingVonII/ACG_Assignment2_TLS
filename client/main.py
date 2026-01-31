@@ -1,4 +1,4 @@
-import os, socket, ssl, json, base64, io
+import os, socket, ssl, io
 import tkinter as tk
 
 from dotenv import load_dotenv
@@ -8,7 +8,7 @@ load_dotenv()
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from PIL import Image, ImageTk
 
-from utils.socket_utils import send_resp, recv_all
+from utils.socket_utils import recv_all
 from client.utils.certificateValidation import TRUSTED_ROOT_PATH, load_file_signing_public_key
 from client.utils.file_utils import send_file, download_file, get_file_list, fetch_preview_bytes
 from client.utils.auth_utils import authenticate_client_gui

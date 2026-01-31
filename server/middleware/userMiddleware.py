@@ -1,4 +1,3 @@
-import json
 from zxcvbn import zxcvbn
 
 def check_password_complexity(password):

@@ -1,5 +1,5 @@
 from cryptography import x509
-from cryptography.x509.oid import NameOID, ExtendedKeyUsageOID
+from cryptography.x509.oid import ExtendedKeyUsageOID
 from cryptography.hazmat.primitives import serialization, hashes
 from datetime import datetime, timedelta, timezone
 
