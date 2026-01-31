@@ -40,7 +40,7 @@
 
     MEK=JTdPwEL12jOPhxRNKBbRy4hGa3LZjnln74NQFKWY+zw=
     ROOT_KEY_PASSPHRASE=securepa$$w0rd459
-    Server_KEY_PASSPHRASE=securepa$$w0rd459
+    SERVER_KEY_PASSPHRASE=securepa$$w0rd459
     ```
 
 > *Note:* MEK must be a base64 encoded 32-byte data.

@@ -49,17 +49,49 @@ def authenticate_client_gui(conn, action, username, password):
     resp = recv_all(conn, resp_len)
 
     if resp == b"LOGGED_IN":
-        salt_file = os.path.join(KEY_FILE_PATH, f"salt_{username}.bin")
-        if not os.path.exists(salt_file):
-            raise ValueError("Salt file missing. Cannot derive key passphrase.")
+        # We only accept "logged in" if we can successfully load salt + derive key.
+        try:
+            salt_file = os.path.join(KEY_FILE_PATH, f"salt_{username}.bin")
+            if not os.path.exists(salt_file):
+                raise FileNotFoundError("Salt file missing. Cannot derive key passphrase.")
 
-        with open(salt_file, "rb") as f:
-            salt = f.read()
+            with open(salt_file, "rb") as f:
+                salt = f.read()
 
-        conn.username = username
-        conn.key_passphrase = derive_passphrase(password, salt)
-        
-        return True, "OK"
+            if not salt or len(salt) < 16:
+                raise ValueError("Salt file invalid or corrupted.")
+
+            key_passphrase = derive_passphrase(password, salt)
+
+            # Only set these AFTER successful derivation
+            conn.username = username
+            conn.key_passphrase = key_passphrase
+
+            return True, "OK"
+
+        except Exception as e:
+            # Ensure client-side state is NOT marked as logged in
+            if hasattr(conn, "username"):
+                conn.username = None
+            if hasattr(conn, "key_passphrase"):
+                conn.key_passphrase = None
+
+            # Best effort: tell server to logout this session so the server doesn't
+            # keep an authenticated connection alive while the client can't proceed.
+            try:
+                conn.send(b"LOGO")
+                resp_len = int.from_bytes(recv_all(conn, 8), "big")
+                _ = recv_all(conn, resp_len)
+            except:
+                pass
+
+            # Also safest: close the connection so any server-side auth context is gone
+            try:
+                conn.close()
+            except:
+                pass
+
+            return False, f"Login blocked: cannot unlock keys ({str(e)})"
 
     if resp == b"REGISTERING":
         # CSR flow with encrypted private key

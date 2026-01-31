@@ -173,8 +173,22 @@ class FileClientGUI:
             self.auth_container.grid_forget()
             self.file_frame.grid(row=0, column=0, sticky="nsew")
             self.list_files()
-        else:
-            messagebox.showerror("Login Failed", msg)
+            return
+
+        # Ensure GUI/client state is not logged in
+        self.username = None
+        self.file_frame.grid_forget()
+        self.show_login_page()
+
+        messagebox.showerror("Login Failed", msg)
+
+        # If auth_utils closed the connection (on failure), reconnect here
+        try:
+            if self.conn is None or getattr(self.conn, "fileno", lambda: -1)() == -1:
+                self.connect_to_server()
+        except Exception as e:
+            self._files_data = []
+            messagebox.showerror("Connection Error", str(e))
             
     def logout(self):
         if not self.conn:
@@ -196,6 +210,7 @@ class FileClientGUI:
 
         self.conn = None
         self.username = None
+        self._files_data = []
 
         # Reset UI
         self.file_frame.grid_forget()
