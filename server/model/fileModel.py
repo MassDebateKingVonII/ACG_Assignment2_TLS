@@ -32,11 +32,11 @@ def store_file(filename: str, plaintext_bytes: bytes, signature: bytes, user_id:
             """, (
                 filename,
                 user_id,
-                enc_data["file"]["nonce"],         # store nonce
-                enc_data["file"]["tag"],           # store GCM tag
-                signature_b64,                     # file signature
-                json.dumps(enc_data["enc_dek"]),  # AES dict
-                enc_data["kek_salt"]              # base64 string
+                enc_data["file"]["nonce"],         # Store nonce
+                enc_data["file"]["tag"],           # Stores the GMAC tag
+                signature_b64,                     # File signature created by server file signing key
+                json.dumps(enc_data["enc_dek"]),   # The encrypted DEK dictionary contain nonce, tag and ciphertext
+                enc_data["kek_salt"]               # The salt used to derive the KEK via the MEK through PBKDF2HMAC
             ))
     finally:
         db.close()
