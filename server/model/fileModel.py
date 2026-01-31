@@ -108,7 +108,6 @@ def delete_file_record(filename: str):
     try:
         with db.cursor() as cur:
             cur.execute("DELETE FROM encrypted_files WHERE filename=%s", (filename,))
-            db.commit()
     finally:
         db.close()
 

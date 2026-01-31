@@ -1,4 +1,4 @@
-import os, socket, ssl, threading, json, base64
+import os, socket, ssl, threading, json, base64, time
 
 from dotenv import load_dotenv
 
@@ -47,7 +47,7 @@ PORT = int(os.getenv("SERVER_PORT"))
 
 server_running = True
 server_socket = None
-mek_rotation_lock = threading.RLock() # Prevent file from uplaoding or downloading when rotation of MEK is happening
+mek_rotation_lock = threading.RLock() # Prevent file from uploading or downloading when rotation of MEK is happening
 
 # ---------------- CLIENT HANDLER ----------------
 def handle_client(conn, addr, file_key):
@@ -379,6 +379,7 @@ def main():
         sock.listen()
         print(f"[+] TLS server listening on {HOST}:{PORT}")
 
+        # A separate thread for the terminal on the server to listen for "/shutdown", "/rotate"
         threading.Thread(target=server_command_listener, daemon=True).start()
 
         while server_running:

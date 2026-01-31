@@ -6,6 +6,7 @@ from mysql.connector import pooling
 load_dotenv()
 
 DB_NAME = os.getenv("DB_NAME")
+KEY_ROTATION_INTERVAL = int(os.getenv("KEY_ROTATION_INTERVAL"))
 
 def init_database():
 
@@ -67,7 +68,7 @@ def init_database():
                         ON UPDATE CASCADE
                 );
             """)
-        
+            
     finally:
         conn.close()
 
