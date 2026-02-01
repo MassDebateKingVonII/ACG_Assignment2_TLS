@@ -381,7 +381,7 @@ class FileClientGUI:
 
             # Set initial window size to exactly the image size
             win.geometry(f"{img_w}x{img_h}")
-            # Allow resizing (you can set a minsize so it doesn't get too small)
+            # Allow resizing (to a minsize)
             win.minsize(200, 150)
 
             # Keep a reference on self to prevent garbage collection
