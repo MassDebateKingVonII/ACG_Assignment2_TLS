@@ -369,23 +369,41 @@ class FileClientGUI:
 
         win = tk.Toplevel(self.master)
         win.title(f"Preview: {filename}")
-        win.geometry("700x500")
 
         if filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
             original_img = Image.open(io.BytesIO(preview_bytes))
+
+            # (Optional) ensure a Tk-friendly mode
+            if original_img.mode not in ("RGB", "RGBA"):
+                original_img = original_img.convert("RGBA")
+
+            img_w, img_h = original_img.size
+
+            # Set initial window size to exactly the image size
+            win.geometry(f"{img_w}x{img_h}")
+            # Allow resizing (you can set a minsize so it doesn't get too small)
+            win.minsize(200, 150)
+
+            # Keep a reference on self to prevent garbage collection
             self._imgtk = ImageTk.PhotoImage(original_img)
 
-            canvas = tk.Canvas(win, bg="black")
+            canvas = tk.Canvas(win, bg="black", highlightthickness=0)
             canvas.pack(fill="both", expand=True)
 
-            canvas_img = canvas.create_image(0, 0, anchor="center", image=self._imgtk)
+            # Place image; we will just re-center it on resize
+            canvas_img = canvas.create_image(img_w // 2, img_h // 2, anchor="center", image=self._imgtk)
 
-            def center_image(event):
-                canvas.coords(canvas_img, event.width // 2, event.height // 2)
+            def center_image(event=None):
+                cw = canvas.winfo_width()
+                ch = canvas.winfo_height()
+                canvas.coords(canvas_img, cw // 2, ch // 2)
 
+            # Center once after the canvas is realized, then on every resize
+            win.after(0, center_image)
             canvas.bind("<Configure>", center_image)
 
         else:
+            win.geometry("700x500")
             text_area = scrolledtext.ScrolledText(win, wrap=tk.WORD)
             text_area.pack(fill="both", expand=True)
             try:
