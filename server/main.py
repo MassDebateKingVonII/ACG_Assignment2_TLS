@@ -354,7 +354,8 @@ def server_command_listener():
         elif cmd == "/rotate":
             try:
                 print("[*] Rotating Master Key (MEK)...")
-                rotate_master_key()
+                with mek_rotation_lock:
+                    rotate_master_key()
                 print("[+] Master Key rotation complete!")
             except Exception as e:
                 print(f"[!] Error during MEK rotation: {e}")
