@@ -27,31 +27,31 @@ class FileClientGUI:
 
         self.conn = None
         self.username = None
-        self.file_pubkey = load_file_signing_public_key()
+        self.file_pubkey = load_file_signing_public_key() #Load server's file signing key
 
         if not self.file_pubkey:
             messagebox.showerror("Error", "Cannot continue without trusted file signing key")
             master.destroy()
             return
 
-        self.context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-        self.context.minimum_version = ssl.TLSVersion.TLSv1_3
-        self.context.load_verify_locations(TRUSTED_ROOT_PATH)
-        self.context.verify_mode = ssl.CERT_REQUIRED
+        self.context = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)  # Create a TLS context for authenticating a server
+        self.context.minimum_version = ssl.TLSVersion.TLSv1_3               # Enforce TLS 1.3 to prevent downgrade and legacy protocol use
+        self.context.load_verify_locations(TRUSTED_ROOT_PATH)               # Load trusted Root CA to validate the server certificate chain
+        self.context.verify_mode = ssl.CERT_REQUIRED                         # Require server certificate verification; reject untrusted servers
 
-        self.connect_to_server()
+        self.connect_to_server() # Establish a secure TLS connection to the server
 
-        self.load_file_icons()
+        self.load_file_icons() # Load UI icons
 
-        self.build_auth_pages()
-        self.build_file_page()
+        self.build_auth_pages() # Build login and registration UI pages
+        self.build_file_page() # Build the main file management UI
 
-        self.show_login_page()
+        self.show_login_page()  # Display the login page to the user
 
     def connect_to_server(self):
-        raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.conn = self.context.wrap_socket(raw_sock, server_hostname=HOST)
-        self.conn.connect((HOST, PORT))
+        raw_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #Create a TCP socket (IPv4, stream-based)
+        self.conn = self.context.wrap_socket(raw_sock, server_hostname=HOST) # Wrap the TCP socket with TLS and set hostname
+        self.conn.connect((HOST, PORT)) # Initiate the TCP connection and perform the TLS handshake
 
     # ---------- ICONS ----------
 
@@ -63,6 +63,7 @@ class FileClientGUI:
             img = img.resize((16, 16), Image.Resampling.LANCZOS)  # resize to 16x16
             return ImageTk.PhotoImage(img)
 
+        # Load file icoms depending on file type
         self.file_icons = {
             "txt": load_icon("text.png"),
             "md": load_icon("text.png"),
@@ -147,14 +148,14 @@ class FileClientGUI:
         f.pack()
 
     def show_login_page(self):
-        self.register_frame.pack_forget()
-        self.login_frame.pack()
-        self.file_frame.grid_forget()
+        self.register_frame.pack_forget() # Hide the registration UI frame
+        self.login_frame.pack() # Show the login UI
+        self.file_frame.grid_forget() # Hide the file UI frame
 
     def show_register_page(self):
-        self.login_frame.pack_forget()
-        self.register_frame.pack()
-        self.file_frame.grid_forget()
+        self.login_frame.pack_forget() # Hide the login UI frame
+        self.register_frame.pack() # Show the resgitration UI frame
+        self.file_frame.grid_forget() # Hide the file UI frame
 
     # ---------- AUTH LOGIC ----------
 
@@ -373,7 +374,7 @@ class FileClientGUI:
         if filename.lower().endswith((".jpg", ".jpeg", ".png", ".gif")):
             original_img = Image.open(io.BytesIO(preview_bytes))
 
-            # (Optional) ensure a Tk-friendly mode
+            # Ensure a Tk-friendly mode
             if original_img.mode not in ("RGB", "RGBA"):
                 original_img = original_img.convert("RGBA")
 

@@ -58,7 +58,7 @@ def handle_client(conn, addr, file_key):
         # ---------------- AUTHENTICATION ----------------
         while not user:
             try:
-                conn.send(b"AUTH")
+                conn.send(b"AUTH") # To start client to authenticate against the register/login
             except (ConnectionResetError, BrokenPipeError):
                 print(f"[-] Client {addr} disconnected during auth")
                 return
@@ -188,7 +188,7 @@ def handle_client(conn, addr, file_key):
                         print(f"[-] Client {addr} disconnected")
                         break
                     
-                    elif cmd == b"LOGO":
+                    elif cmd == b"LOGO": # To logout client
                         # Clear authenticated state for this connection
                         conn.username = None
                         conn.userid = None
@@ -200,11 +200,11 @@ def handle_client(conn, addr, file_key):
                         # Break out of file loop so it goes back to auth loop
                         break
 
-                    if cmd == b"QUIT":
+                    if cmd == b"QUIT": # To quit and end connection client side
                         print(f"[-] Client {addr} disconnected via QUIT")
                         break
 
-                    if cmd == b"FILE":
+                    if cmd == b"FILE": # To recieve a file from client (client upload file)
                         with mek_rotation_lock:
                             length = int.from_bytes(recv_all(conn, 8), "big")
                             data = recv_all(conn, length)
@@ -228,7 +228,7 @@ def handle_client(conn, addr, file_key):
                             else:
                                 print(f"[!] Invalid client signature from {username}")
                             
-                    elif cmd == b"PREV":
+                    elif cmd == b"PREV": # For previewing files 
                         with mek_rotation_lock:
                             # Receive filename
                             fname_len_bytes = recv_all(conn, 8)
@@ -275,7 +275,7 @@ def handle_client(conn, addr, file_key):
 
                             print(f"[+] Sent preview for {filename} to {conn.username}")
                             
-                    elif cmd == b"LIST":
+                    elif cmd == b"LIST": # To list all file via DB
                         try:
                             # Get full list of files
                             files = get_file_list_controller()  # now returns a list of dicts
@@ -294,7 +294,7 @@ def handle_client(conn, addr, file_key):
                             send_resp(conn, payload)
                             continue
                         
-                    elif cmd == b"DOWN":
+                    elif cmd == b"DOWN": # For client downloading file from server
                         with mek_rotation_lock:
                             # Receive filename
                             fname_len_bytes = recv_all(conn, 8)
@@ -366,9 +366,9 @@ def main():
     global server_socket
 
     # Generate/load root CA and server certificate
-    root_key, root_cert = generate_root_ca()
-    server_key, server_cert = generate_server_certificate(root_key, root_cert, common_name=HOSTNAME, ip_address=HOST)
-    file_key, file_cert = generate_file_signing_key(root_key, root_cert)
+    root_key, root_cert = generate_root_ca() # Root cert to sign end-entity certificates
+    server_key, server_cert = generate_server_certificate(root_key, root_cert, common_name=HOSTNAME, ip_address=HOST) # For TLS
+    file_key, file_cert = generate_file_signing_key(root_key, root_cert) # Load/generate file certificate and key for file signing for server-side
 
     context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.minimum_version = ssl.TLSVersion.TLSv1_3
@@ -386,13 +386,13 @@ def main():
         while server_running:
             try:
                 conn, addr = sock.accept()
-                tls_conn = context.wrap_socket(conn, server_side=True)
+                tls_conn = context.wrap_socket(conn, server_side=True) # Wrap server in TLS
+                # 1 thread per connection
                 threading.Thread(target=handle_client, args=(tls_conn, addr, file_key), daemon=True).start()
             except OSError:
                 break
 
     print("[+] Server shut down gracefully.")
-
 
 if __name__ == "__main__":
     main()
