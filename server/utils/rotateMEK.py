@@ -38,7 +38,6 @@ def rotate_master_key():
         old_kek = derive_kek(salt_bytes)
 
         # Decrypt the old DEK
-        
         enc_dek_dict = record["enc_dek"]
         if isinstance(enc_dek_dict, str):
             enc_dek_dict = json.loads(enc_dek_dict)

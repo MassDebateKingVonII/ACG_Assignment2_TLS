@@ -33,8 +33,8 @@ def encrypt_message(plaintext: bytes, key, associated_data: bytes = b""):
 
         return {
             "ciphertext": base64.b64encode(ciphertext).decode(),
-            "nonce": base64.b64encode(nonce).decode(),
-            "tag": base64.b64encode(encryptor.tag).decode()
+            "nonce": base64.b64encode(nonce).decode(), # Random 12 byte (96-bit) IV to start the CTR
+            "tag": base64.b64encode(encryptor.tag).decode() # GMAC created via GHASH is for data integrity (128-bit)
         }
 
     except Exception as e:
